@@ -27,12 +27,11 @@ function getApiKey(): string {
 async function fetchTwelveData(endpoint: string, params: Record<string, string> = {}): Promise<unknown> {
   const url = new URL(`${BASE_URL}${endpoint}`);
   url.searchParams.set("apikey", getApiKey());
-  for (const [k, v] of Object.entries(params)) {
-    url.searchParams.set(k, v);
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value);
   }
 
   const res = await fetch(url.toString(), {
-    next: { revalidate: REVALIDATE.quotes },
     signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) {
@@ -70,11 +69,11 @@ export const twelvedata: MarketDataProvider = {
         outputsize: "10",
       });
       const data = parseProviderPayload(twelveDataSearchSchema, payload, "Twelve Data", "/symbol_search");
-      return data.data.map((r) => ({
-        symbol: r.symbol,
-        name: r.instrument_name,
-        type: r.instrument_type,
-        exchange: r.exchange,
+      return data.data.map((result) => ({
+        symbol: result.symbol,
+        name: result.instrument_name,
+        type: result.instrument_type,
+        exchange: result.exchange,
       }));
     });
   },
@@ -95,13 +94,13 @@ export const twelvedata: MarketDataProvider = {
       });
       const data = parseProviderPayload(twelveDataTimeSeriesSchema, payload, "Twelve Data", "/time_series");
       return data.values
-        .map((v) => ({
-          date: v.datetime,
-          open: parseFiniteNumber(v.open, "open"),
-          high: parseFiniteNumber(v.high, "high"),
-          low: parseFiniteNumber(v.low, "low"),
-          close: parseFiniteNumber(v.close, "close"),
-          volume: parseFiniteNumber(v.volume, "volume"),
+        .map((value) => ({
+          date: value.datetime,
+          open: parseFiniteNumber(value.open, "open"),
+          high: parseFiniteNumber(value.high, "high"),
+          low: parseFiniteNumber(value.low, "low"),
+          close: parseFiniteNumber(value.close, "close"),
+          volume: parseFiniteNumber(value.volume, "volume"),
         }))
         .reverse();
     });
