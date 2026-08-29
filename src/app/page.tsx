@@ -22,9 +22,11 @@ import { AnimatedQuoteCards } from "@/components/home/animated-quote-cards";
 import { MarketPulseCards } from "@/components/home/market-pulse-cards";
 import { QuickActions } from "@/components/home/quick-actions";
 
-// Force dynamic rendering — data changes every few seconds
+// Force dynamic rendering — data changes frequently.
 export const dynamic = "force-dynamic";
 
+// Phase 1 uses a curated starter universe. These symbols are not intended to
+// represent the full US market or a computed trending/gainers ranking.
 const TRENDING_SYMBOLS = [
   "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA",
   "META", "NVDA", "JPM", "V", "JNJ",
@@ -35,6 +37,14 @@ const SECTOR_SYMBOLS: Record<string, string[]> = {
   finance: ["JPM", "V", "MA", "BAC", "GS"],
   healthcare: ["JNJ", "UNH", "PFE", "ABBV", "MRK"],
 };
+
+function UniverseNote() {
+  return (
+    <p className="mt-1 text-xs text-muted-foreground">
+      Based on a curated starter universe, not a full-market ranking or breadth indicator.
+    </p>
+  );
+}
 
 function MarketTableSkeleton() {
   return (
@@ -116,12 +126,12 @@ async function GainersLosers() {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10">
               <TrendingUp className="h-4 w-4 text-emerald-500" />
             </div>
-            Top Gainers
+            Gainers in Selection
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-1 px-4 pb-4">
           {gainers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No gainers today</p>
+            <p className="text-sm text-muted-foreground">No gainers in the current selection</p>
           ) : (
             gainers.map((q) => <MiniQuoteRow key={q.symbol} quote={q} />)
           )}
@@ -133,12 +143,12 @@ async function GainersLosers() {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10">
               <TrendingDown className="h-4 w-4 text-red-500" />
             </div>
-            Top Losers
+            Losers in Selection
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-1 px-4 pb-4">
           {losers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No losers today</p>
+            <p className="text-sm text-muted-foreground">No losers in the current selection</p>
           ) : (
             losers.map((q) => <MiniQuoteRow key={q.symbol} quote={q} />)
           )}
@@ -182,9 +192,9 @@ async function MarketPulseServer() {
   const quotes = await marketData.getQuotes(TRENDING_SYMBOLS);
   if (quotes.length === 0) return null;
 
-  const avgChange = quotes.reduce((s, q) => s + q.changePct, 0) / quotes.length;
-  const gainers = quotes.filter((q) => q.changePct > 0).length;
-  const losers = quotes.filter((q) => q.changePct < 0).length;
+  const avgChange = quotes.reduce((sum, quote) => sum + quote.changePct, 0) / quotes.length;
+  const gainers = quotes.filter((quote) => quote.changePct > 0).length;
+  const losers = quotes.filter((quote) => quote.changePct < 0).length;
 
   return (
     <MarketPulseCards
@@ -205,74 +215,77 @@ async function TickerTapeDataProvider() {
 export default function HomePage() {
   return (
     <div className="relative">
-      {/* Ticker Tape */}
       <Suspense fallback={null}>
         <TickerTapeDataProvider />
       </Suspense>
 
-      {/* Gradient mesh background */}
       <div className="gradient-mesh">
         <div className="mx-auto max-w-7xl space-y-10 px-4 py-8 sm:px-6 lg:px-8">
-          {/* Premium Hero Section */}
           <HeroSection />
-
-          {/* Quick Action Cards */}
           <QuickActions />
 
-          {/* Market Pulse */}
           <section>
-            <div className="flex items-center gap-2 mb-5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-                <Activity className="h-4 w-4 text-primary" />
+            <div className="mb-5">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                  <Activity className="h-4 w-4 text-primary" />
+                </div>
+                <h2 className="text-lg font-semibold">Selected Market Pulse</h2>
               </div>
-              <h2 className="text-lg font-semibold">Market Pulse</h2>
+              <UniverseNote />
             </div>
             <Suspense fallback={<PulseSkeleton />}>
               <MarketPulseServer />
             </Suspense>
           </section>
 
-          {/* Trending Cards */}
           <section>
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10">
-                  <TrendingUp className="h-4 w-4 text-emerald-500" />
+            <div className="mb-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10">
+                    <TrendingUp className="h-4 w-4 text-emerald-500" />
+                  </div>
+                  <h2 className="text-lg font-semibold">Selected Market Leaders</h2>
                 </div>
-                <h2 className="text-lg font-semibold">Trending Stocks</h2>
+                <Link
+                  href="/watchlist"
+                  className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  View watchlist <ChevronRight className="h-4 w-4" />
+                </Link>
               </div>
-              <Link
-                href="/watchlist"
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                View all <ChevronRight className="h-4 w-4" />
-              </Link>
+              <UniverseNote />
             </div>
             <Suspense fallback={<QuoteCardsSkeleton />}>
               <TrendingQuotesServer />
             </Suspense>
           </section>
 
-          {/* Gainers & Losers */}
           <section>
-            <div className="flex items-center gap-2 mb-5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
-                <BarChart3 className="h-4 w-4 text-muted-foreground" />
+            <div className="mb-5">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
+                  <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <h2 className="text-lg font-semibold">Selected Movers</h2>
               </div>
-              <h2 className="text-lg font-semibold">Top Movers</h2>
+              <UniverseNote />
             </div>
             <Suspense fallback={<GainersLosersSkeleton />}>
               <GainersLosers />
             </Suspense>
           </section>
 
-          {/* Sector Tabs + Full Table */}
           <section>
-            <div className="flex items-center gap-2 mb-5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
-                <Globe className="h-4 w-4 text-muted-foreground" />
+            <div className="mb-5">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
+                  <Globe className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <h2 className="text-lg font-semibold">Curated Market Overview</h2>
               </div>
-              <h2 className="text-lg font-semibold">Market Overview</h2>
+              <UniverseNote />
             </div>
 
             <Tabs defaultValue="all">
