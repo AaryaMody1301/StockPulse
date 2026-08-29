@@ -185,7 +185,15 @@ export async function ingestSecEvidence(rawSymbol: string): Promise<SecIngestion
         status,
         endedAt: new Date(),
         error: errors.length > 0 ? errors.join("; ") : null,
-        metadata: summary,
+        metadata: {
+          symbol: summary.symbol,
+          cik: summary.cik,
+          status: summary.status,
+          filingsStored: summary.filingsStored,
+          factsStored: summary.factsStored,
+          metricsStored: summary.metricsStored,
+          errors: summary.errors,
+        },
       },
     });
 
