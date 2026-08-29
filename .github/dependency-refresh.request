@@ -1,10 +1,6 @@
 next=16.3.3
 react=19.2.8
 react-dom=19.2.8
-eslint-config-next=16.3.3
 prisma=7.10.0
-prisma-client=7.10.0
-prisma-adapter-pg=7.10.0
-shadcn=dev
-tsx=runtime
-audit=production
+tsx=4.23.9
+safe-audit-fix=production
