@@ -85,15 +85,15 @@ model CompanyProfile {
 }
 
 model MarketNews {
-  id        Int      @id @default(autoincrement())
-  headline  String   @db.VarChar(500)
-  summary   String?  @db.Text
-  source    String   @db.VarChar(100)
-  url       String   @db.VarChar(1000)
-  imageUrl  String?  @db.VarChar(1000)
-  category  String   @db.VarChar(50)
+  id          Int      @id @default(autoincrement())
+  headline    String   @db.VarChar(500)
+  summary     String?  @db.Text
+  source      String   @db.VarChar(100)
+  url         String   @db.VarChar(1000)
+  imageUrl    String?  @db.VarChar(1000)
+  category    String   @db.VarChar(50)
   publishedAt DateTime
-  createdAt DateTime @default(now())
+  createdAt   DateTime @default(now())
 
   @@index([publishedAt])
   @@index([category])
@@ -103,7 +103,7 @@ model MarketNews {
 model JobRun {
   id        Int      @id @default(autoincrement())
   jobName   String   @db.VarChar(100)
-  status    String   @db.VarChar(20) // running | success | failed
+  status    String   @db.VarChar(20) // running | success | partial | failed
   startedAt DateTime @default(now())
   endedAt   DateTime?
   error     String?  @db.Text
