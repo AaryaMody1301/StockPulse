@@ -8,6 +8,14 @@ import type {
   Quote,
   SymbolSearchResult,
 } from "./types";
+import {
+  finnhubCandleSchema,
+  finnhubNewsSchema,
+  finnhubProfileSchema,
+  finnhubQuoteSchema,
+  finnhubSearchSchema,
+  parseProviderPayload,
+} from "./validation";
 
 const BASE_URL = "https://finnhub.io/api/v1";
 
@@ -17,7 +25,7 @@ function getApiKey(): string {
   return key;
 }
 
-async function fetchFinnhub<T>(endpoint: string, params: Record<string, string> = {}): Promise<T> {
+async function fetchFinnhub(endpoint: string, params: Record<string, string> = {}): Promise<unknown> {
   const url = new URL(`${BASE_URL}${endpoint}`);
   url.searchParams.set("token", getApiKey());
   for (const [k, v] of Object.entries(params)) {
@@ -31,89 +39,35 @@ async function fetchFinnhub<T>(endpoint: string, params: Record<string, string> 
   if (!res.ok) {
     throw new Error(`Finnhub ${endpoint} failed: ${res.status} ${res.statusText}`);
   }
-  return res.json() as Promise<T>;
+  return res.json() as Promise<unknown>;
 }
-
-// ─── Finnhub Response Types ─────────────────────────────
-
-interface FinnhubQuote {
-  c: number;  // current
-  d: number;  // change
-  dp: number; // change percent
-  h: number;  // high
-  l: number;  // low
-  o: number;  // open
-  pc: number; // prev close
-  t: number;  // timestamp
-}
-
-interface FinnhubSearchResult {
-  count: number;
-  result: Array<{
-    description: string;
-    displaySymbol: string;
-    symbol: string;
-    type: string;
-  }>;
-}
-
-interface FinnhubProfile {
-  ticker: string;
-  name: string;
-  logo: string;
-  finnhubIndustry: string;
-  marketCapitalization: number;
-  weburl: string;
-  country: string;
-  currency: string;
-}
-
-interface FinnhubCandle {
-  c: number[];
-  h: number[];
-  l: number[];
-  o: number[];
-  v: number[];
-  t: number[];
-  s: string;
-}
-
-interface FinnhubNewsItem {
-  headline: string;
-  summary: string;
-  source: string;
-  url: string;
-  image: string;
-  category: string;
-  datetime: number;
-}
-
-// ─── Provider Implementation ────────────────────────────
 
 export const finnhub: MarketDataProvider = {
   name: "finnhub",
 
   async getQuote(symbol: string): Promise<Quote> {
     return cacheGetOrFetch(`finnhub:quote:${symbol}`, REVALIDATE.quotes, async () => {
-      const data = await fetchFinnhub<FinnhubQuote>("/quote", { symbol });
+      const payload = await fetchFinnhub("/quote", { symbol });
+      const data = parseProviderPayload(finnhubQuoteSchema, payload, "Finnhub", "/quote");
       return {
         symbol,
-        price: data.c ?? 0,
-        change: data.d ?? 0,
-        changePct: data.dp ?? 0,
-        volume: 0, // Finnhub /quote doesn't include volume
-        high: data.h ?? 0,
-        low: data.l ?? 0,
-        open: data.o ?? 0,
-        prevClose: data.pc ?? 0,
-        timestamp: data.t ?? 0,
+        price: data.c,
+        change: data.d,
+        changePct: data.dp,
+        volume: 0, // Finnhub /quote does not include volume.
+        high: data.h,
+        low: data.l,
+        open: data.o,
+        prevClose: data.pc,
+        timestamp: data.t,
       };
     });
   },
 
   async searchSymbol(query: string): Promise<SymbolSearchResult[]> {
     return cacheGetOrFetch(`finnhub:search:${query}`, REVALIDATE.search, async () => {
-      const data = await fetchFinnhub<FinnhubSearchResult>("/search", { q: query });
+      const payload = await fetchFinnhub("/search", { q: query });
+      const data = parseProviderPayload(finnhubSearchSchema, payload, "Finnhub", "/search");
       return data.result
         .filter((r) => r.type === "Common Stock")
         .slice(0, 10)
@@ -128,7 +82,8 @@ export const finnhub: MarketDataProvider = {
 
   async getCompanyProfile(symbol: string): Promise<CompanyProfileData> {
     return cacheGetOrFetch(`finnhub:profile:${symbol}`, REVALIDATE.profile, async () => {
-      const data = await fetchFinnhub<FinnhubProfile>("/stock/profile2", { symbol });
+      const payload = await fetchFinnhub("/stock/profile2", { symbol });
+      const data = parseProviderPayload(finnhubProfileSchema, payload, "Finnhub", "/stock/profile2");
       return {
         ticker: data.ticker,
         name: data.name,
@@ -149,29 +104,33 @@ export const finnhub: MarketDataProvider = {
       const fromTs = Math.floor(new Date(from).getTime() / 1000).toString();
       const toTs = Math.floor(new Date(to).getTime() / 1000).toString();
 
-      const data = await fetchFinnhub<FinnhubCandle>("/stock/candle", {
+      const payload = await fetchFinnhub("/stock/candle", {
         symbol,
         resolution: "D",
         from: fromTs,
         to: toTs,
       });
+      const data = parseProviderPayload(finnhubCandleSchema, payload, "Finnhub", "/stock/candle");
 
-      if (data.s === "no_data" || !data.c) return [];
+      if (data.s === "no_data" || !data.c || !data.h || !data.l || !data.o || !data.v || !data.t) {
+        return [];
+      }
 
       return data.t.map((t, i) => ({
         date: new Date(t * 1000).toISOString().slice(0, 10),
-        open: data.o[i],
-        high: data.h[i],
-        low: data.l[i],
-        close: data.c[i],
-        volume: data.v[i],
+        open: data.o![i],
+        high: data.h![i],
+        low: data.l![i],
+        close: data.c![i],
+        volume: data.v![i],
       }));
     });
   },
 
   async getMarketNews(category = "general"): Promise<MarketNewsItem[]> {
     return cacheGetOrFetch(`finnhub:news:${category}`, REVALIDATE.news, async () => {
-      const data = await fetchFinnhub<FinnhubNewsItem[]>("/news", { category });
+      const payload = await fetchFinnhub("/news", { category });
+      const data = parseProviderPayload(finnhubNewsSchema, payload, "Finnhub", "/news");
       return data.slice(0, 20).map((n) => ({
         headline: n.headline,
         summary: n.summary,
@@ -185,7 +144,7 @@ export const finnhub: MarketDataProvider = {
   },
 };
 
-/** Fetch company-specific news from Finnhub (not part of the generic provider interface) */
+/** Fetch company-specific news from Finnhub (not part of the generic provider interface). */
 export async function getCompanyNews(
   symbol: string,
 ): Promise<MarketNewsItem[]> {
@@ -193,11 +152,12 @@ export async function getCompanyNews(
   const from = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
 
   return cacheGetOrFetch(`finnhub:company-news:${symbol}`, REVALIDATE.news, async () => {
-    const data = await fetchFinnhub<FinnhubNewsItem[]>("/company-news", {
+    const payload = await fetchFinnhub("/company-news", {
       symbol,
       from,
       to,
     });
+    const data = parseProviderPayload(finnhubNewsSchema, payload, "Finnhub", "/company-news");
     return data.slice(0, 10).map((n) => ({
       headline: n.headline,
       summary: n.summary,
