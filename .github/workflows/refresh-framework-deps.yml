@@ -16,24 +16,25 @@ jobs:
 
     steps:
       - name: Check out Phase 1 branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: phase-1-foundation-hardening
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
-      - name: Install patched runtime and build releases
+      - name: Refresh patched runtime dependencies
         run: |
-          npm pkg delete devDependencies.tsx
-          npm install --save-prod --save-exact next@16.3.3 react@19.2.8 react-dom@19.2.8 @prisma/client@7.10.0 @prisma/adapter-pg@7.10.0 tsx@4.21.0
-          npm install --save-dev --save-exact eslint-config-next@16.3.3 prisma@7.10.0 shadcn@4.0.2
+          npm install --save-prod --save-exact tsx@4.23.9
+          npm audit fix --omit=dev
 
-      - name: Inspect production dependency audit
-        run: npm audit --omit=dev || true
+      - name: Inspect production dependency tree and audit
+        run: |
+          npm ls esbuild fast-uri deepmerge-ts prisma --omit=dev || true
+          npm audit --omit=dev || true
 
       - name: Commit regenerated package lock
         run: |
@@ -43,6 +44,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "Dependency files already current."
           else
-            git commit -m "fix(deps): align patched runtime dependencies"
+            git commit -m "fix(deps): refresh safe production transitive fixes"
             git push origin HEAD:phase-1-foundation-hardening
           fi
