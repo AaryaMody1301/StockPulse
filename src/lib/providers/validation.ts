@@ -85,6 +85,9 @@ export const twelveDataQuoteSchema = z.object({
   timestamp: numericValue,
 });
 
+// Keep provider result arrays required. Twelve Data can return logical error
+// payloads with HTTP 200; a missing `data`/`values` field must therefore fail
+// validation rather than masquerading as a legitimate empty result.
 export const twelveDataSearchSchema = z.object({
   data: z.array(
     z.object({
@@ -93,7 +96,7 @@ export const twelveDataSearchSchema = z.object({
       instrument_type: z.string(),
       exchange: z.string(),
     }),
-  ).default([]),
+  ),
 });
 
 export const twelveDataTimeSeriesSchema = z.object({
@@ -106,7 +109,7 @@ export const twelveDataTimeSeriesSchema = z.object({
       close: numericValue,
       volume: numericValue.optional().default("0"),
     }),
-  ).default([]),
+  ),
 });
 
 export function parseFiniteNumber(value: string | number, field: string): number {
