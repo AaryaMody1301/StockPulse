@@ -110,6 +110,10 @@ export const twelveDataTimeSeriesSchema = z.object({
 });
 
 export function parseFiniteNumber(value: string | number, field: string): number {
+  if (typeof value === "string" && value.trim() === "") {
+    throw new Error(`Invalid numeric value for ${field}`);
+  }
+
   const parsed = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(parsed)) {
     throw new Error(`Invalid numeric value for ${field}`);
