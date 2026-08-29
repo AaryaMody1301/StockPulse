@@ -1,24 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { marketData } from "@/lib/providers";
-import { z } from "zod/v4";
 import { rateLimit } from "@/lib/rate-limit";
-
-const schema = z.object({
-  symbols: z
-    .string()
-    .transform((s) => s.split(",").map((t) => t.trim().toUpperCase()))
-    .pipe(z.array(z.string().min(1).max(10)).min(1).max(4)),
-});
+import { getClientIp } from "@/lib/request";
+import { normalizeStockSymbols } from "@/lib/symbols";
 
 export async function GET(request: NextRequest) {
-  const ip = request.headers.get("x-forwarded-for") ?? "unknown";
-  const limited = rateLimit(ip);
+  const limited = rateLimit(getClientIp(request.headers));
   if (limited) return limited;
-  const { searchParams } = request.nextUrl;
-  const parsed = schema.safeParse({ symbols: searchParams.get("symbols") || "" });
 
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Provide 1-4 symbols" }, { status: 400 });
+  const rawSymbols = request.nextUrl.searchParams.get("symbols");
+  if (!rawSymbols) {
+    return NextResponse.json({ error: "Provide 2-4 symbols" }, { status: 400 });
+  }
+
+  let symbols: string[];
+  try {
+    symbols = normalizeStockSymbols(rawSymbols.split(","), 4);
+  } catch {
+    return NextResponse.json({ error: "Provide 2-4 valid symbols" }, { status: 400 });
+  }
+
+  if (symbols.length < 2) {
+    return NextResponse.json({ error: "Provide 2-4 distinct symbols" }, { status: 400 });
   }
 
   const to = new Date().toISOString().slice(0, 10);
@@ -28,7 +31,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const results = await Promise.allSettled(
-      parsed.data.symbols.map(async (symbol) => ({
+      symbols.map(async (symbol) => ({
         symbol,
         bars: await marketData.getDailyBars(symbol, from, to),
       })),
@@ -42,8 +45,8 @@ export async function GET(request: NextRequest) {
       .map((r) => r.value);
 
     const failed = results
-      .map((r, i) => (r.status === "rejected" ? parsed.data.symbols[i] : null))
-      .filter(Boolean);
+      .map((r, i) => (r.status === "rejected" ? symbols[i] : null))
+      .filter((symbol): symbol is string => Boolean(symbol));
 
     return NextResponse.json(
       { data, ...(failed.length > 0 && { failed }) },
