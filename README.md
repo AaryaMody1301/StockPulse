@@ -8,7 +8,7 @@ The longer-term product upgrade is documented in [`docs/UPGRADE_PLAN.md`](docs/U
 
 Install:
 
-1. Node.js 20+ (LTS recommended)
+1. Node.js 20.19+ (Node 22 recommended and used by CI)
 2. npm 10+
 3. PostgreSQL 14+
 4. Git
@@ -205,9 +205,9 @@ Keep that path unless you update **all** deployment configs together.
 
 Typical deployment:
 
-1. Install Node.js, npm, PostgreSQL, Nginx, and PM2.
+1. Install Node.js 20.19+ (Node 22 recommended), npm, PostgreSQL, Nginx, and PM2.
 2. Clone/update the repo at `/var/www/investsmart`.
-3. Install dependencies. The current poller runs through `tsx`, so do not omit development dependencies in Phase 1 (`npm ci --include=dev` is explicit and safe).
+3. Run `npm ci`. Keep development/build dependencies available while Prisma generation/migrations, checks, and the production build run. `tsx` itself is a runtime dependency because PM2 uses it for the quote worker.
 4. Create production `.env`/`.env.local` values outside version control.
 5. Run `npx prisma migrate deploy`.
 6. Run `npm run check`.
@@ -235,7 +235,7 @@ The web process intentionally stays at one instance in Phase 1 because the custo
 ### Website works but worker scripts fail
 
 - Confirm `.env` exists; the workers use `dotenv/config`.
-- Confirm production dependencies include `tsx` under the current Phase 1 deployment model.
+- Confirm the production install contains the `tsx` runtime dependency.
 - Run `npm run typecheck:scripts` before restarting PM2.
 
 ### Provider returns quota/error JSON
@@ -257,3 +257,5 @@ Phase 1 runtime-validates provider payloads. Invalid provider JSON is treated as
 - Keep the Node process behind the configured reverse proxy.
 - Treat external provider responses as untrusted input.
 - Verify third-party market-data display/redistribution rights before public production use.
+- Phase 1 pins patched framework/runtime lines instead of relying on broad semver ranges for Next.js, React, Prisma, and `tsx`.
+- Review the known dependency-audit exception in [`docs/OPERATIONS.md`](docs/OPERATIONS.md) before deployment.
