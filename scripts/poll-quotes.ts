@@ -10,6 +10,7 @@ import "dotenv/config";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { finnhub } from "../src/lib/providers/finnhub";
+import { classifyJobRun } from "../src/lib/jobs";
 import { normalizeStockSymbols } from "../src/lib/symbols";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
@@ -103,8 +104,7 @@ async function pollOnce() {
       }
     }
 
-    const status =
-      failures.length === 0 ? "success" : successCount === 0 ? "failed" : "partial";
+    const status = classifyJobRun(SYMBOLS.length, successCount);
 
     await db.jobRun.update({
       where: { id: jobRun.id },
