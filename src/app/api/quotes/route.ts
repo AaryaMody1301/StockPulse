@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { marketData } from "@/lib/providers";
+import { canonicalMarket } from "@/lib/market/repository";
 import { REVALIDATE } from "@/lib/constants";
 import { rateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/request";
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const quotes = await marketData.getQuotes(symbols);
+    const quotes = await canonicalMarket.getQuotes(symbols);
     return NextResponse.json(
       { data: quotes },
       {
