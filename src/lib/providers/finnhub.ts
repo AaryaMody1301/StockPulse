@@ -28,12 +28,11 @@ function getApiKey(): string {
 async function fetchFinnhub(endpoint: string, params: Record<string, string> = {}): Promise<unknown> {
   const url = new URL(`${BASE_URL}${endpoint}`);
   url.searchParams.set("token", getApiKey());
-  for (const [k, v] of Object.entries(params)) {
-    url.searchParams.set(k, v);
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value);
   }
 
   const res = await fetch(url.toString(), {
-    next: { revalidate: REVALIDATE.quotes },
     signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) {
@@ -69,12 +68,12 @@ export const finnhub: MarketDataProvider = {
       const payload = await fetchFinnhub("/search", { q: query });
       const data = parseProviderPayload(finnhubSearchSchema, payload, "Finnhub", "/search");
       return data.result
-        .filter((r) => r.type === "Common Stock")
+        .filter((result) => result.type === "Common Stock")
         .slice(0, 10)
-        .map((r) => ({
-          symbol: r.symbol,
-          name: r.description,
-          type: r.type,
+        .map((result) => ({
+          symbol: result.symbol,
+          name: result.description,
+          type: result.type,
           exchange: "US",
         }));
     });
@@ -116,13 +115,13 @@ export const finnhub: MarketDataProvider = {
         return [];
       }
 
-      return data.t.map((t, i) => ({
-        date: new Date(t * 1000).toISOString().slice(0, 10),
-        open: data.o![i],
-        high: data.h![i],
-        low: data.l![i],
-        close: data.c![i],
-        volume: data.v![i],
+      return data.t.map((timestamp, index) => ({
+        date: new Date(timestamp * 1000).toISOString().slice(0, 10),
+        open: data.o![index],
+        high: data.h![index],
+        low: data.l![index],
+        close: data.c![index],
+        volume: data.v![index],
       }));
     });
   },
@@ -131,14 +130,14 @@ export const finnhub: MarketDataProvider = {
     return cacheGetOrFetch(`finnhub:news:${category}`, REVALIDATE.news, async () => {
       const payload = await fetchFinnhub("/news", { category });
       const data = parseProviderPayload(finnhubNewsSchema, payload, "Finnhub", "/news");
-      return data.slice(0, 20).map((n) => ({
-        headline: n.headline,
-        summary: n.summary,
-        source: n.source,
-        url: n.url,
-        imageUrl: n.image,
-        category: n.category,
-        publishedAt: n.datetime,
+      return data.slice(0, 20).map((item) => ({
+        headline: item.headline,
+        summary: item.summary,
+        source: item.source,
+        url: item.url,
+        imageUrl: item.image,
+        category: item.category,
+        publishedAt: item.datetime,
       }));
     });
   },
@@ -158,14 +157,14 @@ export async function getCompanyNews(
       to,
     });
     const data = parseProviderPayload(finnhubNewsSchema, payload, "Finnhub", "/company-news");
-    return data.slice(0, 10).map((n) => ({
-      headline: n.headline,
-      summary: n.summary,
-      source: n.source,
-      url: n.url,
-      imageUrl: n.image,
-      category: n.category,
-      publishedAt: n.datetime,
+    return data.slice(0, 10).map((item) => ({
+      headline: item.headline,
+      summary: item.summary,
+      source: item.source,
+      url: item.url,
+      imageUrl: item.image,
+      category: item.category,
+      publishedAt: item.datetime,
     }));
   });
 }
