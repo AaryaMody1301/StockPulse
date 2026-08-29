@@ -31,6 +31,9 @@ jobs:
           npm install --save-exact next@16.3.3 react@19.2.8 react-dom@19.2.8
           npm install --save-dev --save-exact eslint-config-next@16.3.3
 
+      - name: Inspect production dependency audit
+        run: npm audit --omit=dev || true
+
       - name: Commit regenerated package lock
         run: |
           git config user.name "github-actions[bot]"
