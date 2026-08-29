@@ -1,21 +1,16 @@
-# StockPulse: API Setup and Run Guide
+# StockPulse: Setup, Verification, and Run Guide
 
-This guide explains exactly how to:
+StockPulse is a Next.js stock-market analytics application with market-data provider fallback, PostgreSQL/Prisma storage, background quote/history workers, stock comparison, news, browser-local watchlists, and browser-local portfolio tracking.
 
-1. Get all required API keys.
-2. Configure environment variables.
-3. Set up PostgreSQL + Prisma.
-4. Run the website locally.
-5. Run background data workers.
-6. Deploy with PM2 + Nginx (Hostinger VPS flow).
+The longer-term product upgrade is documented in [`docs/UPGRADE_PLAN.md`](docs/UPGRADE_PLAN.md). Production assumptions and data-source constraints are documented in [`docs/OPERATIONS.md`](docs/OPERATIONS.md).
 
 ## 1. Prerequisites
 
-Install the following first:
+Install:
 
 1. Node.js 20+ (LTS recommended)
 2. npm 10+
-3. PostgreSQL 14+ (local or remote)
+3. PostgreSQL 14+
 4. Git
 
 Verify:
@@ -25,7 +20,7 @@ node -v
 npm -v
 ```
 
-## 2. Clone and Install
+## 2. Clone and install
 
 ```powershell
 git clone <your-repo-url>
@@ -33,129 +28,139 @@ cd stock-market
 npm install
 ```
 
-## 3. Get API Keys
+For CI and reproducible production installs, prefer `npm ci` with the checked-in lockfile.
 
-This project supports:
+## 3. Market-data providers
 
-1. `FINNHUB_API_KEY` (primary provider)
-2. `TWELVEDATA_API_KEY` (fallback provider)
+The application supports:
 
-### 3.1 Finnhub (required)
+1. `FINNHUB_API_KEY` as the primary provider
+2. `TWELVEDATA_API_KEY` as a fallback for supported quote/search/history operations
+
+### 3.1 Finnhub
 
 1. Go to `https://finnhub.io/`
-2. Click `Get free API key` and create an account
-3. Verify your email
-4. Open dashboard and copy API key
-5. Paste into `FINNHUB_API_KEY`
+2. Create an account and obtain an API key
+3. Put the key in `FINNHUB_API_KEY`
 
-Notes:
+Provider plans, quotas, endpoint availability, and usage rights can change. Confirm the endpoints available to the plan actually used by the deployment.
 
-1. Free tier limits can change; check your dashboard for current quota.
-2. This app uses Finnhub for quotes, symbol search, profiles, bars, and news.
-
-### 3.2 Twelve Data (recommended fallback)
+### 3.2 Twelve Data
 
 1. Go to `https://twelvedata.com/`
-2. Create a free account
-3. Open API dashboard
-4. Copy your API key
-5. Paste into `TWELVEDATA_API_KEY`
+2. Create an account and obtain an API key
+3. Put the key in `TWELVEDATA_API_KEY`
 
-Notes:
+Twelve Data is used as a fallback for supported quote, symbol-search, and daily-history requests. Company-profile and news behavior is intentionally not assumed to be equivalent across providers.
 
-1. Used as backup when Finnhub fails for quotes/search/bars.
-2. Company profile and news fallback are limited on free tier.
+> Public display/redistribution rights depend on the provider plan and market. Review [`docs/OPERATIONS.md`](docs/OPERATIONS.md) before deploying market data publicly.
 
-## 4. Environment Configuration
+## 4. Environment configuration
 
-This repo includes `.env.example`. Copy it to both `.env.local` and `.env`:
+Copy `.env.example` to both `.env.local` and `.env`:
 
 ```powershell
 Copy-Item .env.example .env.local
 Copy-Item .env.example .env
 ```
 
-Why both files:
+The Next.js app reads `.env.local`. The standalone TypeScript workers use `dotenv/config` and read `.env`.
 
-1. Next.js app reads `.env.local`
-2. Worker scripts (`tsx` + `dotenv/config`) read `.env`
-
-Set values in both files:
+Example:
 
 ```env
 DATABASE_URL="postgresql://user:password@localhost:5432/stockmarket?schema=public"
 FINNHUB_API_KEY="your_finnhub_key"
 TWELVEDATA_API_KEY="your_twelvedata_key"
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
-NODE_ENV="development"
 POLL_INTERVAL_MS="15000"
 POLL_SYMBOLS="AAPL,MSFT,GOOGL,AMZN,TSLA,META,NVDA,JPM,V,JNJ"
 ```
 
-## 5. PostgreSQL Setup
+Never commit real credentials.
 
-Create database:
+## 5. PostgreSQL and Prisma
+
+Create a database:
 
 ```sql
 CREATE DATABASE stockmarket;
 ```
 
-Update `DATABASE_URL` with your real user/password/host/port.
-
-Example local URL:
-
-```env
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/stockmarket?schema=public"
-```
-
-## 6. Prisma Setup
-
-Run migrations and generate client:
+Point `DATABASE_URL` at the real database, then run:
 
 ```powershell
-npx prisma migrate dev --name init
+npx prisma migrate dev
 npx prisma generate
 ```
 
-Optional check:
+For an existing production database, use the checked-in migrations with:
+
+```powershell
+npx prisma migrate deploy
+```
+
+Optional local inspection:
 
 ```powershell
 npx prisma studio
 ```
 
-## 7. Run the Website (Local)
+## 6. Verify the repository
 
-Start Next.js app:
+Phase 1 adds one verification gate for application code and workers:
+
+```powershell
+npm run check
+```
+
+It runs:
+
+1. application TypeScript checking
+2. worker TypeScript checking
+3. ESLint
+4. unit tests
+
+Then verify a production build:
+
+```powershell
+npm run build
+```
+
+Do not deploy a branch that fails either command.
+
+## 7. Run the website locally
 
 ```powershell
 npm run dev
 ```
 
-Open:
+Open `http://localhost:3000`.
 
-1. `http://localhost:3000`
-
-Build test:
+Production-mode local check:
 
 ```powershell
 npm run build
 npm run start
 ```
 
-## 8. Run Data Workers
+## 8. Run data workers
 
-### 8.1 Quote poller (continuous snapshots)
+### 8.1 Quote poller
 
 ```powershell
 npx tsx scripts/poll-quotes.ts
 ```
 
-What it does:
+The Phase 1 poller:
 
-1. Ensures symbols exist in DB
-2. Polls latest quote data
-3. Writes to `quote_snapshots`
-4. Logs each job in `job_runs`
+1. validates and de-duplicates configured symbols on startup
+2. runs only one polling cycle at a time
+3. upserts snapshots on `(symbolId, timestamp)` so repeated provider timestamps are safe
+4. records `success`, `partial`, or `failed` job outcomes
+5. records per-symbol failures in job metadata
+
+Finnhub `/quote` does not supply quote volume; Finnhub-backed snapshot volume is currently stored as `0` and explicitly recorded as a limitation in job metadata. Do not build volume analytics from `quote_snapshots` until the source/model is upgraded.
 
 ### 8.2 Historical daily backfill
 
@@ -163,16 +168,14 @@ What it does:
 npx tsx scripts/backfill-daily.ts
 ```
 
-What it does:
+The backfill fetches approximately one year of daily OHLCV for active symbols and inserts missing `(symbolId, date)` rows while skipping duplicates.
 
-1. Pulls ~1 year OHLCV per active symbol
-2. Upserts into `daily_bars`
+## 9. API health checks
 
-## 9. Quick API Health Checks
-
-With app running:
+With the app running:
 
 ```powershell
+curl "http://localhost:3000/api/health"
 curl "http://localhost:3000/api/quotes?symbols=AAPL,MSFT"
 curl "http://localhost:3000/api/stocks/search?q=apple"
 curl "http://localhost:3000/api/news?category=general"
@@ -180,56 +183,77 @@ curl "http://localhost:3000/api/news?category=general"
 
 Expected:
 
-1. HTTP 200 with JSON `data` arrays
-2. No `Failed to fetch` errors
+1. `/api/health` returns `status: "ok"`
+2. valid data routes return JSON responses
+3. malformed ticker lists are rejected with HTTP 400 before provider calls
 
-## 10. Production (Hostinger VPS Pattern)
+## 10. Production: current Hostinger/VPS pattern
 
-This repo already includes:
+The repository includes:
 
-1. `ecosystem.config.js` (PM2 apps)
-2. `deploy/nginx.conf` (reverse proxy + SSL)
+1. `ecosystem.config.js` for PM2
+2. `deploy/nginx.conf` for the reverse proxy/TLS pattern
+3. `server.js` as the production Node entry point
 
-Typical production steps:
+The checked-in deployment configs currently assume the application path is:
 
-1. Install Node.js, npm, PostgreSQL, Nginx, PM2 on VPS
-2. Clone repo to `/var/www/stockpulse`
-3. Run `npm install`
-4. Create `.env` (production values)
-5. Run `npx prisma migrate deploy`
-6. Run `npm run build`
-7. Start PM2: `pm2 start ecosystem.config.js`
-8. Configure Nginx with `deploy/nginx.conf` and your real domain
-9. Install SSL cert (certbot)
-10. Reload services (`pm2 save`, `systemctl reload nginx`)
+```text
+/var/www/investsmart
+```
+
+Keep that path unless you update **all** deployment configs together.
+
+Typical deployment:
+
+1. Install Node.js, npm, PostgreSQL, Nginx, and PM2.
+2. Clone/update the repo at `/var/www/investsmart`.
+3. Install dependencies. The current poller runs through `tsx`, so do not omit development dependencies in Phase 1 (`npm ci --include=dev` is explicit and safe).
+4. Create production `.env`/`.env.local` values outside version control.
+5. Run `npx prisma migrate deploy`.
+6. Run `npm run check`.
+7. Run `npm run build`.
+8. Start/reload PM2 with `ecosystem.config.js`.
+9. Configure Nginx from `deploy/nginx.conf` with the real domain/certificate paths.
+10. Verify `/api/health`, then verify quote/search/news routes.
+11. Save PM2 state and reload Nginx.
+
+The web process intentionally stays at one instance in Phase 1 because the custom cache and rate limiter are process-local. Read [`docs/OPERATIONS.md`](docs/OPERATIONS.md) before scaling horizontally.
 
 ## 11. Troubleshooting
 
-### Error: `FINNHUB_API_KEY is not set`
+### `FINNHUB_API_KEY is not set`
 
-1. Confirm key exists in `.env.local` and `.env`
-2. Restart dev server
+- Confirm the key exists in the environment file used by the process.
+- Restart the relevant app/worker after changing environment variables.
 
-### Error: Prisma connection failure
+### Prisma connection failure
 
-1. Recheck `DATABASE_URL`
-2. Confirm Postgres is running
-3. Confirm DB/user permissions
+- Recheck `DATABASE_URL`.
+- Confirm PostgreSQL is reachable.
+- Confirm the database user has the required permissions.
 
-### Scripts run but website works
+### Website works but worker scripts fail
 
-1. Usually means `.env` is missing (scripts use dotenv)
-2. Copy `.env.local` to `.env` and retry
+- Confirm `.env` exists; the workers use `dotenv/config`.
+- Confirm production dependencies include `tsx` under the current Phase 1 deployment model.
+- Run `npm run typecheck:scripts` before restarting PM2.
 
-### Build fails in production
+### Provider returns quota/error JSON
 
-1. Run `npm run build` locally first
-2. Ensure migration is deployed: `npx prisma migrate deploy`
-3. Confirm environment variables are present in server shell/session
+Phase 1 runtime-validates provider payloads. Invalid provider JSON is treated as an error rather than converted into zero-valued market data; quote/search/history operations can then use the configured fallback where supported.
 
-## 12. Security Notes
+### Production build fails
 
-1. Never commit real `.env` or `.env.local`
-2. Keep only `.env.example` in git
-3. Rotate API keys if leaked
-4. Use DB credentials with least privilege
+- Run `npm run check` first.
+- Confirm generated Prisma client setup succeeds.
+- Confirm required environment variables are present.
+- Run `npx prisma migrate deploy` for production schema changes.
+
+## 12. Security and operational notes
+
+- Never commit `.env` or `.env.local`.
+- Rotate leaked API keys immediately.
+- Keep database credentials least-privileged.
+- Keep the Node process behind the configured reverse proxy.
+- Treat external provider responses as untrusted input.
+- Verify third-party market-data display/redistribution rights before public production use.
