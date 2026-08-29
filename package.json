@@ -8,7 +8,11 @@
     "prebuild": "node ./scripts/prepare-hostinger-build.mjs",
     "build": "node ./scripts/run-next-build.mjs",
     "start": "node server.js",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "typecheck:scripts": "tsc -p tsconfig.scripts.json --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "check": "npm run typecheck && npm run typecheck:scripts && npm run lint && npm test"
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",
