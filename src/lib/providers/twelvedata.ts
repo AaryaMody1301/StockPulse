@@ -8,6 +8,13 @@ import type {
   Quote,
   SymbolSearchResult,
 } from "./types";
+import {
+  parseFiniteNumber,
+  parseProviderPayload,
+  twelveDataQuoteSchema,
+  twelveDataSearchSchema,
+  twelveDataTimeSeriesSchema,
+} from "./validation";
 
 const BASE_URL = "https://api.twelvedata.com";
 
@@ -17,7 +24,7 @@ function getApiKey(): string {
   return key;
 }
 
-async function fetchTwelveData<T>(endpoint: string, params: Record<string, string> = {}): Promise<T> {
+async function fetchTwelveData(endpoint: string, params: Record<string, string> = {}): Promise<unknown> {
   const url = new URL(`${BASE_URL}${endpoint}`);
   url.searchParams.set("apikey", getApiKey());
   for (const [k, v] of Object.entries(params)) {
@@ -29,78 +36,41 @@ async function fetchTwelveData<T>(endpoint: string, params: Record<string, strin
     signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) {
-    throw new Error(`TwelveData ${endpoint} failed: ${res.status} ${res.statusText}`);
+    throw new Error(`Twelve Data ${endpoint} failed: ${res.status} ${res.statusText}`);
   }
-  return res.json() as Promise<T>;
+  return res.json() as Promise<unknown>;
 }
-
-// ─── Twelve Data Response Types ─────────────────────────
-
-interface TDQuote {
-  symbol: string;
-  name: string;
-  exchange: string;
-  close: string;
-  change: string;
-  percent_change: string;
-  volume: string;
-  high: string;
-  low: string;
-  open: string;
-  previous_close: string;
-  timestamp: number;
-}
-
-interface TDSearchResult {
-  data: Array<{
-    symbol: string;
-    instrument_name: string;
-    instrument_type: string;
-    exchange: string;
-  }>;
-}
-
-interface TDTimeSeries {
-  values: Array<{
-    datetime: string;
-    open: string;
-    high: string;
-    low: string;
-    close: string;
-    volume: string;
-  }>;
-}
-
-// ─── Provider Implementation ────────────────────────────
 
 export const twelvedata: MarketDataProvider = {
   name: "twelvedata",
 
   async getQuote(symbol: string): Promise<Quote> {
     return cacheGetOrFetch(`td:quote:${symbol}`, REVALIDATE.quotes, async () => {
-      const data = await fetchTwelveData<TDQuote>("/quote", { symbol });
+      const payload = await fetchTwelveData("/quote", { symbol });
+      const data = parseProviderPayload(twelveDataQuoteSchema, payload, "Twelve Data", "/quote");
       return {
         symbol: data.symbol,
-        price: parseFloat(data.close) || 0,
-        change: parseFloat(data.change) || 0,
-        changePct: parseFloat(data.percent_change) || 0,
-        volume: parseInt(data.volume, 10) || 0,
-        high: parseFloat(data.high) || 0,
-        low: parseFloat(data.low) || 0,
-        open: parseFloat(data.open) || 0,
-        prevClose: parseFloat(data.previous_close) || 0,
-        timestamp: data.timestamp || 0,
+        price: parseFiniteNumber(data.close, "close"),
+        change: parseFiniteNumber(data.change, "change"),
+        changePct: parseFiniteNumber(data.percent_change, "percent_change"),
+        volume: parseFiniteNumber(data.volume, "volume"),
+        high: parseFiniteNumber(data.high, "high"),
+        low: parseFiniteNumber(data.low, "low"),
+        open: parseFiniteNumber(data.open, "open"),
+        prevClose: parseFiniteNumber(data.previous_close, "previous_close"),
+        timestamp: parseFiniteNumber(data.timestamp, "timestamp"),
       };
     });
   },
 
   async searchSymbol(query: string): Promise<SymbolSearchResult[]> {
     return cacheGetOrFetch(`td:search:${query}`, REVALIDATE.search, async () => {
-      const data = await fetchTwelveData<TDSearchResult>("/symbol_search", {
+      const payload = await fetchTwelveData("/symbol_search", {
         symbol: query,
         outputsize: "10",
       });
-      return (data.data || []).map((r) => ({
+      const data = parseProviderPayload(twelveDataSearchSchema, payload, "Twelve Data", "/symbol_search");
+      return data.data.map((r) => ({
         symbol: r.symbol,
         name: r.instrument_name,
         type: r.instrument_type,
@@ -111,27 +81,27 @@ export const twelvedata: MarketDataProvider = {
 
   async getCompanyProfile(symbol: string): Promise<CompanyProfileData> {
     void symbol;
-    // Twelve Data free tier doesn't include company profile
     throw new Error("Company profile not available on Twelve Data free tier");
   },
 
   async getDailyBars(symbol: string, from: string, to: string): Promise<DailyBarData[]> {
     return cacheGetOrFetch(`td:bars:${symbol}:${from}:${to}`, REVALIDATE.profile, async () => {
-      const data = await fetchTwelveData<TDTimeSeries>("/time_series", {
+      const payload = await fetchTwelveData("/time_series", {
         symbol,
         interval: "1day",
         start_date: from,
         end_date: to,
         outputsize: "365",
       });
-      return (data.values || [])
+      const data = parseProviderPayload(twelveDataTimeSeriesSchema, payload, "Twelve Data", "/time_series");
+      return data.values
         .map((v) => ({
           date: v.datetime,
-          open: parseFloat(v.open) || 0,
-          high: parseFloat(v.high) || 0,
-          low: parseFloat(v.low) || 0,
-          close: parseFloat(v.close) || 0,
-          volume: parseInt(v.volume, 10) || 0,
+          open: parseFiniteNumber(v.open, "open"),
+          high: parseFiniteNumber(v.high, "high"),
+          low: parseFiniteNumber(v.low, "low"),
+          close: parseFiniteNumber(v.close, "close"),
+          volume: parseFiniteNumber(v.volume, "volume"),
         }))
         .reverse();
     });
@@ -139,7 +109,6 @@ export const twelvedata: MarketDataProvider = {
 
   async getMarketNews(category?: string): Promise<MarketNewsItem[]> {
     void category;
-    // Twelve Data free tier doesn't include news
     return [];
   },
 };
