@@ -2,6 +2,9 @@
   "name": "investsmart",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
     "dev": "node ./node_modules/next/dist/bin/next dev",
     "postinstall": "prisma generate --schema=prisma/schema.prisma",
