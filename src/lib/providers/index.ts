@@ -1,16 +1,9 @@
 import { finnhub, getCompanyNews } from "./finnhub";
 import { twelvedata } from "./twelvedata";
+import { normalizeStockSymbol } from "@/lib/symbols";
 import type { MarketDataProvider, Quote, SymbolSearchResult, CompanyProfileData, DailyBarData, MarketNewsItem } from "./types";
 
 export type { Quote, SymbolSearchResult, CompanyProfileData, DailyBarData, MarketNewsItem } from "./types";
-
-/** Validates a stock ticker symbol (1-10 uppercase alphanumeric + dots) */
-const SYMBOL_RE = /^[A-Z0-9.]{1,10}$/;
-function validateSymbol(symbol: string): string {
-  const s = symbol.trim().toUpperCase();
-  if (!SYMBOL_RE.test(s)) throw new Error(`Invalid symbol: ${symbol}`);
-  return s;
-}
 
 /**
  * Unified market data service with automatic fallback.
@@ -33,7 +26,7 @@ class MarketDataService {
   }
 
   async getQuote(symbol: string): Promise<Quote> {
-    const s = validateSymbol(symbol);
+    const s = normalizeStockSymbol(symbol);
     return this.withFallback((p) => p.getQuote(s));
   }
 
@@ -53,7 +46,7 @@ class MarketDataService {
   }
 
   async getCompanyProfile(symbol: string): Promise<CompanyProfileData> {
-    const s = validateSymbol(symbol);
+    const s = normalizeStockSymbol(symbol);
     try {
       return await finnhub.getCompanyProfile(s);
     } catch (err) {
@@ -64,7 +57,7 @@ class MarketDataService {
   }
 
   async getDailyBars(symbol: string, from: string, to: string): Promise<DailyBarData[]> {
-    const s = validateSymbol(symbol);
+    const s = normalizeStockSymbol(symbol);
     return this.withFallback((p) => p.getDailyBars(s, from, to));
   }
 
@@ -73,7 +66,7 @@ class MarketDataService {
   }
 
   async getCompanyNews(symbol: string): Promise<MarketNewsItem[]> {
-    const s = validateSymbol(symbol);
+    const s = normalizeStockSymbol(symbol);
     return getCompanyNews(s);
   }
 }
