@@ -5,16 +5,46 @@ import {
   parseFiniteNumber,
   parseProviderPayload,
   twelveDataQuoteSchema,
+  twelveDataSearchSchema,
+  twelveDataTimeSeriesSchema,
 } from "../src/lib/providers/validation";
 
-test("Twelve Data logical error payload is rejected", () => {
+const logicalError = { status: "error", message: "API credits exhausted" };
+
+test("Twelve Data quote logical error payload is rejected", () => {
   assert.throws(
     () =>
       parseProviderPayload(
         twelveDataQuoteSchema,
-        { status: "error", message: "API credits exhausted" },
+        logicalError,
         "Twelve Data",
         "/quote",
+      ),
+    /invalid payload/,
+  );
+});
+
+test("Twelve Data search logical error payload is rejected", () => {
+  assert.throws(
+    () =>
+      parseProviderPayload(
+        twelveDataSearchSchema,
+        logicalError,
+        "Twelve Data",
+        "/symbol_search",
+      ),
+    /invalid payload/,
+  );
+});
+
+test("Twelve Data time-series logical error payload is rejected", () => {
+  assert.throws(
+    () =>
+      parseProviderPayload(
+        twelveDataTimeSeriesSchema,
+        logicalError,
+        "Twelve Data",
+        "/time_series",
       ),
     /invalid payload/,
   );
@@ -41,7 +71,8 @@ test("Finnhub candle payload rejects mismatched arrays", () => {
   );
 });
 
-test("parseFiniteNumber rejects non-numeric provider values", () => {
+test("parseFiniteNumber rejects non-numeric and empty provider values", () => {
   assert.equal(parseFiniteNumber("123.45", "close"), 123.45);
   assert.throws(() => parseFiniteNumber("not-a-number", "close"), /Invalid numeric value/);
+  assert.throws(() => parseFiniteNumber("   ", "close"), /Invalid numeric value/);
 });
