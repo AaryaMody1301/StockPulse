@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 export function HeroSection() {
   return (
     <section className="relative overflow-hidden rounded-2xl border border-border/40 bg-gradient-to-br from-card via-card to-primary/5 p-8 sm:p-12">
-      {/* Animated background orbs */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-primary/5 blur-3xl" />
         <div className="absolute -bottom-32 -left-32 h-80 w-80 rounded-full bg-primary/3 blur-3xl" />
@@ -26,7 +25,7 @@ export function HeroSection() {
             </div>
             <span className="rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-medium text-primary">
               <Sparkles className="mr-1 inline h-3 w-3" />
-              Real-time Analytics
+              Market Analytics
             </span>
           </div>
 
@@ -46,8 +45,8 @@ export function HeroSection() {
           </h1>
 
           <p className="mt-4 max-w-lg text-lg text-muted-foreground">
-            Real-time market data, interactive charts, portfolio tracking, and
-            smart analytics — all in one place.
+            Market prices, interactive charts, portfolio tracking, and focused
+            analytics — all in one place.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -65,7 +64,6 @@ export function HeroSection() {
           </div>
         </motion.div>
 
-        {/* Floating stats pills */}
         <motion.div
           className="mt-8 flex flex-wrap gap-3"
           initial={{ opacity: 0 }}
@@ -73,7 +71,7 @@ export function HeroSection() {
           transition={{ delay: 0.4, duration: 0.6 }}
         >
           {[
-            { label: "Real-time Prices", icon: "⚡" },
+            { label: "Latest Prices", icon: "⚡" },
             { label: "Portfolio Tracking", icon: "📊" },
             { label: "10+ Symbols", icon: "📈" },
             { label: "Dark Mode", icon: "🌙" },
