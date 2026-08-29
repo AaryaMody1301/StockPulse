@@ -6,11 +6,13 @@ This document records production assumptions that are easy to lose when the appl
 
 Phase 1 assumes:
 
+- Node.js 20.19+; Node 22 is recommended and used by CI;
 - one Next.js web process behind Nginx;
 - one quote-polling worker;
 - PostgreSQL available to the worker;
 - Finnhub and Twelve Data credentials supplied through environment variables;
-- the repository installed with development dependencies because the current production poller executes TypeScript through `tsx`.
+- development/build dependencies are present while Prisma generation/migrations, verification, and the production build run;
+- `tsx` is a runtime dependency because the production quote worker executes TypeScript through PM2.
 
 The PM2 configuration intentionally keeps the web process at `instances: 1`.
 
@@ -50,9 +52,24 @@ npm run check
 npm run build
 ```
 
-`npm run check` runs application type checking, worker type checking, ESLint, and unit tests.
+`npm run check` runs application type checking, worker type checking, ESLint, and unit tests. GitHub Actions runs the same gate on Node 22 and then builds the production application.
 
 Do not deploy a branch that fails any of these checks.
+
+## Dependency security status
+
+Phase 1 pins these security-sensitive lines explicitly:
+
+- Next.js `16.3.3`
+- React / React DOM `19.2.8`
+- Prisma client / PostgreSQL adapter / CLI `7.10.0`
+- `tsx` `4.23.9`
+
+The safe production audit refresh also moved `esbuild` and `fast-uri` to patched transitive versions.
+
+`npm audit --omit=dev` still reports three high-severity findings through Prisma's CLI/config dependency on `deepmerge-ts <8` (`GHSA-ggr8-5vv4-36mx`). npm currently proposes resolving that finding with `--force` by downgrading Prisma to `6.12.0`. Phase 1 intentionally does **not** apply that breaking downgrade. The finding is tracked as a known dependency exception and should be re-evaluated when Prisma publishes a compatible dependency update.
+
+Do not use `npm audit fix --force` as an automated deployment step.
 
 ## Market-data usage and licensing
 
