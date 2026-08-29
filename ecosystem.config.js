@@ -2,8 +2,7 @@ module.exports = {
   apps: [
     {
       name: "investsmart-web",
-      script: "node_modules/.bin/next",
-      args: "start -p 3000",
+      script: "server.js",
       cwd: "/var/www/investsmart",
       env: {
         NODE_ENV: "production",
@@ -28,7 +27,6 @@ module.exports = {
       max_memory_restart: "256M",
       error_file: "/var/log/pm2/investsmart-poller-error.log",
       out_file: "/var/log/pm2/investsmart-poller-out.log",
-      // Auto-restart on crash
       autorestart: true,
       max_restarts: 10,
       restart_delay: 5000,
