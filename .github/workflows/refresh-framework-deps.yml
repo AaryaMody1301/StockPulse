@@ -1,0 +1,44 @@
+name: Refresh framework dependencies
+
+on:
+  push:
+    branches: [phase-1-foundation-hardening]
+    paths:
+      - .github/dependency-refresh.request
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out Phase 1 branch
+        uses: actions/checkout@v4
+        with:
+          ref: phase-1-foundation-hardening
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install patched framework releases
+        run: |
+          npm install --save-exact next@16.3.3 react@19.2.8 react-dom@19.2.8
+          npm install --save-dev --save-exact eslint-config-next@16.3.3
+
+      - name: Commit regenerated package lock
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          if git diff --cached --quiet; then
+            echo "Dependency files already current."
+          else
+            git commit -m "fix(deps): patch Next.js and React security releases"
+            git push origin HEAD:phase-1-foundation-hardening
+          fi
