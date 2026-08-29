@@ -26,10 +26,11 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Install patched framework releases
+      - name: Install patched runtime and build releases
         run: |
-          npm install --save-exact next@16.3.3 react@19.2.8 react-dom@19.2.8 tsx@4.21.0
-          npm install --save-dev --save-exact eslint-config-next@16.3.3 prisma@7.4.2 shadcn@4.0.2
+          npm pkg delete devDependencies.tsx
+          npm install --save-prod --save-exact next@16.3.3 react@19.2.8 react-dom@19.2.8 @prisma/client@7.10.0 @prisma/adapter-pg@7.10.0 tsx@4.21.0
+          npm install --save-dev --save-exact eslint-config-next@16.3.3 prisma@7.10.0 shadcn@4.0.2
 
       - name: Inspect production dependency audit
         run: npm audit --omit=dev || true
@@ -42,6 +43,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "Dependency files already current."
           else
-            git commit -m "fix(deps): separate runtime and build dependencies"
+            git commit -m "fix(deps): align patched runtime dependencies"
             git push origin HEAD:phase-1-foundation-hardening
           fi
