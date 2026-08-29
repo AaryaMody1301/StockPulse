@@ -29,7 +29,7 @@ jobs:
       - name: Refresh patched runtime dependencies
         run: |
           npm install --save-prod --save-exact tsx@4.23.9
-          npm audit fix --omit=dev
+          npm audit fix --omit=dev || true
 
       - name: Inspect production dependency tree and audit
         run: |
