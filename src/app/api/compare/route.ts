@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { marketData } from "@/lib/providers";
+import { canonicalMarket } from "@/lib/market/repository";
 import { rateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/request";
 import { normalizeStockSymbols } from "@/lib/symbols";
@@ -29,37 +29,37 @@ export async function GET(request: NextRequest) {
     .toISOString()
     .slice(0, 10);
 
-  try {
-    const results = await Promise.allSettled(
-      symbols.map(async (symbol) => ({
-        symbol,
-        bars: await marketData.getDailyBars(symbol, from, to),
-      })),
-    );
+  const results = await Promise.allSettled(
+    symbols.map(async (symbol) => ({
+      symbol,
+      bars: await canonicalMarket.getDailyBars(symbol, from, to),
+    })),
+  );
 
-    const data = results
-      .filter(
-        (r): r is PromiseFulfilledResult<{ symbol: string; bars: Array<{ date: string; open: number; high: number; low: number; close: number; volume: number }> }> =>
-          r.status === "fulfilled",
-      )
-      .map((r) => r.value);
+  const data = results
+    .filter(
+      (r): r is PromiseFulfilledResult<{ symbol: string; bars: Array<{ date: string; open: number; high: number; low: number; close: number; volume: number }> }> =>
+        r.status === "fulfilled",
+    )
+    .map((r) => r.value);
 
-    const failed = results
-      .map((r, i) => (r.status === "rejected" ? symbols[i] : null))
-      .filter((symbol): symbol is string => Boolean(symbol));
+  const failed = results
+    .map((r, i) => (r.status === "rejected" ? symbols[i] : null))
+    .filter((symbol): symbol is string => Boolean(symbol));
 
+  if (data.length === 0) {
     return NextResponse.json(
-      { data, ...(failed.length > 0 && { failed }) },
-      {
-        headers: {
-          "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
-        },
-      },
-    );
-  } catch {
-    return NextResponse.json(
-      { error: "Failed to fetch comparison data" },
+      { error: "Failed to load comparison data", failed },
       { status: 502 },
     );
   }
+
+  return NextResponse.json(
+    { data, ...(failed.length > 0 && { failed }) },
+    {
+      headers: {
+        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+      },
+    },
+  );
 }
