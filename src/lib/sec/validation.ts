@@ -8,14 +8,23 @@ export const secTickerEntrySchema = z.object({
 
 export const secTickerMapSchema = z.record(z.string(), secTickerEntrySchema);
 
-const recentFilingsSchema = z.object({
+export const secFilingColumnsSchema = z.object({
   accessionNumber: z.array(z.string()),
   filingDate: z.array(z.string()),
   reportDate: z.array(z.string()),
   acceptanceDateTime: z.array(z.string()),
   form: z.array(z.string()),
   primaryDocument: z.array(z.string()),
-});
+}).passthrough();
+
+export const secSubmissionHistoryFileSchema = z.object({
+  name: z.string().trim().regex(/^CIK\d{10}-submissions-\d{3}\.json$/),
+  filingCount: z.number().int().nonnegative(),
+  filingFrom: z.string().default(""),
+  filingTo: z.string().default(""),
+}).passthrough();
+
+export const secSubmissionHistorySchema = secFilingColumnsSchema;
 
 export const secSubmissionsSchema = z.object({
   cik: z.string(),
@@ -23,8 +32,8 @@ export const secSubmissionsSchema = z.object({
   tickers: z.array(z.string()).default([]),
   exchanges: z.array(z.string()).default([]),
   filings: z.object({
-    recent: recentFilingsSchema,
-    files: z.array(z.unknown()).default([]),
+    recent: secFilingColumnsSchema,
+    files: z.array(secSubmissionHistoryFileSchema).default([]),
   }),
 }).passthrough();
 
@@ -56,6 +65,9 @@ export const secCompanyFactsSchema = z.object({
 }).passthrough();
 
 export type SecTickerMapPayload = z.infer<typeof secTickerMapSchema>;
+export type SecFilingColumnsPayload = z.infer<typeof secFilingColumnsSchema>;
+export type SecSubmissionHistoryFile = z.infer<typeof secSubmissionHistoryFileSchema>;
+export type SecSubmissionHistoryPayload = z.infer<typeof secSubmissionHistorySchema>;
 export type SecSubmissionsPayload = z.infer<typeof secSubmissionsSchema>;
 export type SecCompanyFactsPayload = z.infer<typeof secCompanyFactsSchema>;
 export type SecFactUnitPayload = z.infer<typeof secFactUnitSchema>;
