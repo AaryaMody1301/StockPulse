@@ -4,6 +4,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SiteHeader } from "@/components/site-header";
+import { getAppUrl } from "@/lib/app-url";
 import { Toaster } from "sonner";
 
 const inter = Inter({
@@ -12,12 +13,13 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  metadataBase: getAppUrl(),
   title: {
-    default: "InvestSmart — Smart Stock Market Analytics",
-    template: "%s | InvestSmart",
+    default: "StockPulse — Evidence-first investment research",
+    template: "%s | StockPulse",
   },
   description:
-    "Stock market analytics with current prices, interactive charts, portfolio tracking, watchlists, and market news.",
+    "Evidence-first stock research with market data, SEC filings, deterministic change detection, local thesis tracking, and optional citation-validated AI analysis.",
 };
 
 export default function RootLayout({
@@ -46,11 +48,10 @@ export default function RootLayout({
                       <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10">
                         <svg className="h-3 w-3 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
                       </div>
-                      <span className="text-foreground/80">InvestSmart</span>
+                      <span className="text-foreground/80">StockPulse</span>
                     </div>
                     <p className="text-center text-xs text-muted-foreground">
-                      &copy; {new Date().getFullYear()} InvestSmart. Market data provided
-                      by Finnhub &amp; Twelve Data. For personal use only.
+                      &copy; {new Date().getFullYear()} StockPulse. Market data may come from Finnhub and Twelve Data; filing evidence comes from SEC EDGAR. Research tool, not investment advice.
                     </p>
                   </div>
                 </div>
