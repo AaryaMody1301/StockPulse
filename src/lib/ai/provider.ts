@@ -31,8 +31,9 @@ export interface AiAnalysisResult {
 
 function normalizeBaseUrl(value: string): string {
   const url = new URL(value);
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new Error("AI_BASE_URL must use http or https");
+  const isLoopback = url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1";
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && isLoopback)) {
+    throw new Error("AI_BASE_URL must use HTTPS except for a loopback development endpoint");
   }
   return url.toString().replace(/\/$/, "");
 }
