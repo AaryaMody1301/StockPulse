@@ -47,6 +47,8 @@ const GROUNDING_INSTRUCTIONS = [
   "Do not produce BUY, HOLD, SELL, target-price, or personalized investment-advice conclusions.",
 ] as const;
 
+const RECOMMENDATION_LANGUAGE = /\b(?:buy|sell|hold|price\s*target|target\s*price)\b/i;
+
 function filingId(accessionNumber: string): string {
   return `filing:${accessionNumber}`;
 }
@@ -160,6 +162,15 @@ export function validateGroundedAnalysis(
     if (unknownIds.length > 0) {
       throw new Error(`Grounded analysis referenced unknown evidence IDs: ${unknownIds.join(", ")}`);
     }
+  }
+
+  const textFields = [
+    parsed.summary,
+    ...parsed.claims.map((claim) => claim.text),
+    ...parsed.uncertainties,
+  ];
+  if (textFields.some((value) => RECOMMENDATION_LANGUAGE.test(value))) {
+    throw new Error("Grounded analysis contained disallowed recommendation language");
   }
 
   return parsed;
