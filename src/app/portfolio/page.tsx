@@ -68,45 +68,37 @@ export default function PortfolioPage() {
         );
       }
     } catch {
-      // keep existing enriched data
+      // Keep the last successful portfolio state visible on transient errors.
     } finally {
       setLoading(false);
     }
   }, [holdings]);
 
-  // Fetch on mount + whenever holdings change
   useEffect(() => {
-    fetchPrices();
+    void fetchPrices();
   }, [fetchPrices]);
 
-  // Portfolio metrics
-  const totalInvested = enriched.reduce(
-    (s, h) => s + h.shares * h.avgCost,
-    0,
-  );
-  const totalCurrent = enriched.reduce(
-    (s, h) => s + h.shares * h.currentPrice,
-    0,
-  );
+  const totalInvested = enriched.reduce((sum, holding) => sum + holding.shares * holding.avgCost, 0);
+  const totalCurrent = enriched.reduce((sum, holding) => sum + holding.shares * holding.currentPrice, 0);
   const totalPL = totalCurrent - totalInvested;
   const totalPLPct = totalInvested > 0 ? (totalPL / totalInvested) * 100 : 0;
 
   const exportCSV = () => {
     const header = "Symbol,Shares,Avg Cost,Current Price,Market Value,P&L,P&L %";
-    const rows = enriched.map((h) => {
-      const mv = h.shares * h.currentPrice;
-      const cb = h.shares * h.avgCost;
-      const pl = mv - cb;
-      const plPct = cb > 0 ? (pl / cb) * 100 : 0;
-      return `${h.symbol},${h.shares},${h.avgCost.toFixed(2)},${h.currentPrice.toFixed(2)},${mv.toFixed(2)},${pl.toFixed(2)},${plPct.toFixed(2)}%`;
+    const rows = enriched.map((holding) => {
+      const marketValue = holding.shares * holding.currentPrice;
+      const costBasis = holding.shares * holding.avgCost;
+      const profitLoss = marketValue - costBasis;
+      const profitLossPct = costBasis > 0 ? (profitLoss / costBasis) * 100 : 0;
+      return `${holding.symbol},${holding.shares},${holding.avgCost.toFixed(2)},${holding.currentPrice.toFixed(2)},${marketValue.toFixed(2)},${profitLoss.toFixed(2)},${profitLossPct.toFixed(2)}%`;
     });
     const csv = [header, ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `investsmart-portfolio-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `stockpulse-portfolio-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
     URL.revokeObjectURL(url);
     toast.success("Portfolio exported to CSV");
   };
@@ -122,9 +114,7 @@ export default function PortfolioPage() {
               </div>
               <div>
                 <h1 className="text-3xl font-bold tracking-tight">Portfolio</h1>
-                <p className="text-muted-foreground">
-                  Track your investments and monitor performance
-                </p>
+                <p className="text-muted-foreground">Track your investments and monitor performance</p>
               </div>
             </div>
           </section>
@@ -133,10 +123,9 @@ export default function PortfolioPage() {
             <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-2xl bg-muted/50">
               <PieChart className="h-10 w-10 text-muted-foreground/30" />
             </div>
-            <h2 className="text-xl font-semibold mb-2">No holdings yet</h2>
-            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-              Add stocks to your portfolio from any stock detail page to start
-              tracking your investments and P&L.
+            <h2 className="mb-2 text-xl font-semibold">No holdings yet</h2>
+            <p className="mx-auto mb-6 max-w-md text-muted-foreground">
+              Add stocks to your portfolio from any stock detail page to start tracking your investments and P&amp;L.
             </p>
             <Link href="/">
               <Button size="lg" className="shadow-lg shadow-primary/25">
@@ -158,196 +147,156 @@ export default function PortfolioPage() {
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
               <Briefcase className="h-6 w-6 text-primary" />
             </div>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Portfolio</h1>
-            <p className="text-muted-foreground">
-              {holdings.length} holding{holdings.length !== 1 ? "s" : ""}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <RefreshCountdown interval={30} onRefresh={fetchPrices} loading={loading} />
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={exportCSV}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Export
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={fetchPrices}
-              disabled={loading}
-            >
-              <RefreshCw
-                className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`}
-              />
-              Refresh
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      {/* Portfolio Summary */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <MetricCard label="Total Value" value={formatPrice(totalCurrent)} />
-        <MetricCard label="Invested" value={formatPrice(totalInvested)} />
-        <MetricCard
-          label="Total P&L"
-          value={`${totalPL >= 0 ? "+" : ""}${formatPrice(totalPL)}`}
-          className={totalPL >= 0 ? "text-emerald-500" : "text-red-500"}
-          icon={
-            totalPL >= 0 ? (
-              <TrendingUp className="h-4 w-4 text-emerald-500" />
-            ) : (
-              <TrendingDown className="h-4 w-4 text-red-500" />
-            )
-          }
-        />
-        <MetricCard
-          label="Return"
-          value={`${totalPLPct >= 0 ? "+" : ""}${totalPLPct.toFixed(2)}%`}
-          className={totalPLPct >= 0 ? "text-emerald-500" : "text-red-500"}
-        />
-      </div>
-
-      {/* Allocation Chart - simple bar */}
-      {enriched.length > 1 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Allocation</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex h-4 w-full overflow-hidden rounded-full">
-              {enriched.map((h, i) => {
-                const weight =
-                  totalCurrent > 0
-                    ? (h.shares * h.currentPrice) / totalCurrent
-                    : 0;
-                if (weight === 0) return null;
-                return (
-                  <div
-                    key={h.id}
-                    style={{ width: `${weight * 100}%` }}
-                    className={cn(
-                      "h-full transition-all",
-                      ALLOCATION_COLORS[i % ALLOCATION_COLORS.length],
-                    )}
-                    title={`${h.symbol}: ${(weight * 100).toFixed(1)}%`}
-                  />
-                );
-              })}
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Portfolio</h1>
+              <p className="text-muted-foreground">
+                {holdings.length} holding{holdings.length !== 1 ? "s" : ""}
+              </p>
             </div>
-            <div className="mt-3 flex flex-wrap gap-3">
-              {enriched.map((h, i) => {
-                const weight =
-                  totalCurrent > 0
-                    ? (h.shares * h.currentPrice) / totalCurrent
-                    : 0;
-                if (weight === 0) return null;
-                return (
-                  <div key={h.id} className="flex items-center gap-1.5 text-xs">
+          </div>
+          <div className="flex items-center gap-3">
+            <RefreshCountdown interval={30} onRefresh={fetchPrices} loading={loading} />
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={exportCSV}>
+                <Download className="mr-2 h-4 w-4" />
+                Export
+              </Button>
+              <Button variant="outline" size="sm" onClick={fetchPrices} disabled={loading}>
+                <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <MetricCard label="Total Value" value={formatPrice(totalCurrent)} />
+          <MetricCard label="Invested" value={formatPrice(totalInvested)} />
+          <MetricCard
+            label="Total P&L"
+            value={`${totalPL >= 0 ? "+" : ""}${formatPrice(totalPL)}`}
+            className={totalPL >= 0 ? "text-emerald-500" : "text-red-500"}
+            icon={
+              totalPL >= 0 ? (
+                <TrendingUp className="h-4 w-4 text-emerald-500" />
+              ) : (
+                <TrendingDown className="h-4 w-4 text-red-500" />
+              )
+            }
+          />
+          <MetricCard
+            label="Return"
+            value={`${totalPLPct >= 0 ? "+" : ""}${totalPLPct.toFixed(2)}%`}
+            className={totalPLPct >= 0 ? "text-emerald-500" : "text-red-500"}
+          />
+        </div>
+
+        {enriched.length > 1 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Allocation</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex h-4 w-full overflow-hidden rounded-full">
+                {enriched.map((holding, index) => {
+                  const weight = totalCurrent > 0 ? (holding.shares * holding.currentPrice) / totalCurrent : 0;
+                  if (weight === 0) return null;
+                  return (
                     <div
-                      className={cn(
-                        "h-2.5 w-2.5 rounded-full",
-                        ALLOCATION_COLORS[i % ALLOCATION_COLORS.length],
-                      )}
+                      key={holding.id}
+                      style={{ width: `${weight * 100}%` }}
+                      className={cn("h-full transition-all", ALLOCATION_COLORS[index % ALLOCATION_COLORS.length])}
+                      title={`${holding.symbol}: ${(weight * 100).toFixed(1)}%`}
                     />
-                    <span className="font-medium">{h.symbol}</span>
-                    <span className="text-muted-foreground">
-                      {(weight * 100).toFixed(1)}%
-                    </span>
-                  </div>
+                  );
+                })}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-3">
+                {enriched.map((holding, index) => {
+                  const weight = totalCurrent > 0 ? (holding.shares * holding.currentPrice) / totalCurrent : 0;
+                  if (weight === 0) return null;
+                  return (
+                    <div key={holding.id} className="flex items-center gap-1.5 text-xs">
+                      <div className={cn("h-2.5 w-2.5 rounded-full", ALLOCATION_COLORS[index % ALLOCATION_COLORS.length])} />
+                      <span className="font-medium">{holding.symbol}</span>
+                      <span className="text-muted-foreground">{(weight * 100).toFixed(1)}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Symbol</TableHead>
+                <TableHead className="text-right">Shares</TableHead>
+                <TableHead className="text-right">Avg Cost</TableHead>
+                <TableHead className="text-right">Current</TableHead>
+                <TableHead className="text-right">Market Value</TableHead>
+                <TableHead className="text-right">P&amp;L</TableHead>
+                <TableHead className="w-[60px]"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {enriched.map((holding) => {
+                const marketValue = holding.shares * holding.currentPrice;
+                const costBasis = holding.shares * holding.avgCost;
+                const profitLoss = marketValue - costBasis;
+                const profitLossPct = costBasis > 0 ? (profitLoss / costBasis) * 100 : 0;
+
+                return (
+                  <TableRow key={holding.id} className="hover:bg-muted/50">
+                    <TableCell className="font-semibold">
+                      <Link href={`/stocks/${holding.symbol}`} className="hover:underline">
+                        {holding.symbol}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">{holding.shares}</TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">{formatPrice(holding.avgCost)}</TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">
+                      {holding.currentPrice > 0 ? formatPrice(holding.currentPrice) : "—"}
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">
+                      {holding.currentPrice > 0 ? formatPrice(marketValue) : "—"}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-right font-mono tabular-nums font-medium",
+                        profitLoss >= 0 ? "text-emerald-500" : "text-red-500",
+                      )}
+                    >
+                      {holding.currentPrice > 0 ? (
+                        <>
+                          {profitLoss >= 0 ? "+" : ""}
+                          {formatPrice(profitLoss)}
+                          <span className="ml-1 text-xs">
+                            ({profitLossPct >= 0 ? "+" : ""}{profitLossPct.toFixed(2)}%)
+                          </span>
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={() => removeHolding(holding.id)}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
                 );
               })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Holdings Table */}
-      <div className="rounded-lg border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Symbol</TableHead>
-              <TableHead className="text-right">Shares</TableHead>
-              <TableHead className="text-right">Avg Cost</TableHead>
-              <TableHead className="text-right">Current</TableHead>
-              <TableHead className="text-right">Market Value</TableHead>
-              <TableHead className="text-right">P&L</TableHead>
-              <TableHead className="w-[60px]"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {enriched.map((h) => {
-              const marketValue = h.shares * h.currentPrice;
-              const costBasis = h.shares * h.avgCost;
-              const pl = marketValue - costBasis;
-              const plPct = costBasis > 0 ? (pl / costBasis) * 100 : 0;
-
-              return (
-                <TableRow key={h.id} className="hover:bg-muted/50">
-                  <TableCell className="font-semibold">
-                    <Link
-                      href={`/stocks/${h.symbol}`}
-                      className="hover:underline"
-                    >
-                      {h.symbol}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-right font-mono tabular-nums">
-                    {h.shares}
-                  </TableCell>
-                  <TableCell className="text-right font-mono tabular-nums">
-                    {formatPrice(h.avgCost)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono tabular-nums">
-                    {h.currentPrice > 0
-                      ? formatPrice(h.currentPrice)
-                      : "—"}
-                  </TableCell>
-                  <TableCell className="text-right font-mono tabular-nums">
-                    {h.currentPrice > 0 ? formatPrice(marketValue) : "—"}
-                  </TableCell>
-                  <TableCell
-                    className={cn(
-                      "text-right font-mono tabular-nums font-medium",
-                      pl >= 0 ? "text-emerald-500" : "text-red-500",
-                    )}
-                  >
-                    {h.currentPrice > 0 ? (
-                      <>
-                        {pl >= 0 ? "+" : ""}
-                        {formatPrice(pl)}
-                        <span className="ml-1 text-xs">
-                          ({plPct >= 0 ? "+" : ""}
-                          {plPct.toFixed(2)}%)
-                        </span>
-                      </>
-                    ) : (
-                      "—"
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      onClick={() => removeHolding(h.id)}
-                      className="text-muted-foreground hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
+            </TableBody>
+          </Table>
+        </div>
       </div>
     </div>
   );
@@ -384,9 +333,7 @@ function MetricCard({
           <p className="text-xs font-medium text-muted-foreground">{label}</p>
           {icon && <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted/50">{icon}</div>}
         </div>
-        <p className={cn("text-xl font-bold tabular-nums mt-1", className)}>
-          {value}
-        </p>
+        <p className={cn("mt-1 text-xl font-bold tabular-nums", className)}>{value}</p>
       </CardContent>
     </Card>
   );
