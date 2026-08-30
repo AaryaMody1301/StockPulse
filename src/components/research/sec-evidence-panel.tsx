@@ -1,4 +1,5 @@
-import { ExternalLink, FileText, Landmark } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, ExternalLink, FileText, Landmark } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { StoredSecEvidence } from "@/lib/sec/repository";
@@ -52,11 +53,20 @@ export function SecEvidencePanel({ evidence }: { evidence: StoredSecEvidence | n
             </span>
             SEC Evidence
           </span>
-          {evidence.cik && (
-            <Badge variant="secondary" className="font-mono text-[11px]">
-              CIK {evidence.cik}
-            </Badge>
-          )}
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/stocks/${evidence.symbol}/changes`}
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+            >
+              View changes
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+            {evidence.cik && (
+              <Badge variant="secondary" className="font-mono text-[11px]">
+                CIK {evidence.cik}
+              </Badge>
+            )}
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6 p-4 sm:p-6">
