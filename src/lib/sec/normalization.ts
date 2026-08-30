@@ -188,6 +188,16 @@ function stableKey(parts: Array<string | number | null | undefined>): string {
     .digest("hex");
 }
 
+function encodeSecDocumentPath(primaryDocument: string | null): string | null {
+  const document = primaryDocument?.trim().replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!document) return null;
+  const segments = document.split("/").filter(Boolean);
+  if (segments.length === 0 || segments.some((segment) => segment === "." || segment === "..")) {
+    return null;
+  }
+  return segments.map((segment) => encodeURIComponent(segment)).join("/");
+}
+
 export function buildSecFilingUrl(
   cik: string,
   accessionNumber: string,
@@ -195,9 +205,9 @@ export function buildSecFilingUrl(
 ): string {
   const numericCik = String(Number.parseInt(normalizeCik(cik), 10));
   const accession = accessionNumber.replace(/-/g, "");
-  const document = primaryDocument?.replace(/^\/+/, "").trim();
+  const document = encodeSecDocumentPath(primaryDocument);
   const base = `https://www.sec.gov/Archives/edgar/data/${numericCik}/${accession}`;
-  return document ? `${base}/${encodeURIComponent(document)}` : `${base}/`;
+  return document ? `${base}/${document}` : `${base}/`;
 }
 
 export function normalizeFilingColumns(
