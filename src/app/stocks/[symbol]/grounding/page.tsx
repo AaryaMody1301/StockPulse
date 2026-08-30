@@ -5,6 +5,7 @@ import { buildGroundingBundle } from "@/lib/ai/grounding";
 import { getStoredMetricChanges } from "@/lib/change-intelligence/repository";
 import { getStoredSecEvidence } from "@/lib/sec/repository";
 import { normalizeStockSymbol } from "@/lib/symbols";
+import { AiAnalysisPanel } from "@/components/research/ai-analysis-panel";
 import { GroundingActions } from "@/components/research/grounding-actions";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,7 +63,7 @@ export default async function GroundingPage({ params }: GroundingPageProps) {
               </div>
               <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
                 A provider-neutral evidence packet for {bundle.companyName} ({bundle.symbol}).
-                It contains source facts and deterministic calculations only; no model has generated or interpreted this content.
+                Stored evidence and deterministic calculations remain available even when optional AI is disabled or unavailable.
               </p>
             </div>
             <Badge variant="outline">AI optional</Badge>
@@ -100,6 +101,8 @@ export default async function GroundingPage({ params }: GroundingPageProps) {
             ))}
           </CardContent>
         </Card>
+
+        <AiAnalysisPanel symbol={symbol} />
 
         <Card className="overflow-hidden border-border/50">
           <CardHeader className="border-b border-border/40 bg-muted/20">
