@@ -10,12 +10,25 @@ import "dotenv/config";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { finnhub } from "../src/lib/providers/finnhub";
+import { classifyJobRun } from "../src/lib/jobs";
+import { normalizeStockSymbols } from "../src/lib/symbols";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const db = new PrismaClient({ adapter });
 
-const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL_MS || "15000", 10);
-const SYMBOLS = (process.env.POLL_SYMBOLS || "AAPL,MSFT,GOOGL").split(",").map((s) => s.trim());
+const configuredInterval = Number.parseInt(process.env.POLL_INTERVAL_MS || "15000", 10);
+const POLL_INTERVAL = Number.isFinite(configuredInterval)
+  ? Math.max(configuredInterval, 1000)
+  : 15000;
+const SYMBOLS = normalizeStockSymbols(
+  (process.env.POLL_SYMBOLS || "AAPL,MSFT,GOOGL").split(","),
+  30,
+);
+
+let timer: NodeJS.Timeout | null = null;
+let activePoll: Promise<void> | null = null;
+let shuttingDown = false;
+let shutdownStarted = false;
 
 async function ensureSymbolsExist(tickers: string[]) {
   for (const ticker of tickers) {
@@ -24,7 +37,7 @@ async function ensureSymbolsExist(tickers: string[]) {
       update: {},
       create: {
         ticker,
-        name: ticker, // Will be enriched by profile fetch
+        name: ticker, // Enriched separately when profile ingestion is enabled.
         exchange: "US",
       },
     });
@@ -41,47 +54,75 @@ async function pollOnce() {
     const symbolRecords = await db.symbol.findMany({
       where: { ticker: { in: SYMBOLS }, isActive: true },
     });
-
-    const symbolMap = new Map(symbolRecords.map((s) => [s.ticker, s.id]));
+    const symbolMap = new Map(symbolRecords.map((symbol) => [symbol.ticker, symbol.id]));
 
     let successCount = 0;
+    const failures: Array<{ symbol: string; error: string }> = [];
+
     for (const ticker of SYMBOLS) {
       try {
         const quote = await finnhub.getQuote(ticker);
         const symbolId = symbolMap.get(ticker);
-        if (!symbolId) continue;
+        if (!symbolId) {
+          throw new Error("Configured symbol is missing from the database");
+        }
+        if (quote.timestamp <= 0 || quote.price <= 0) {
+          throw new Error("Provider returned a non-tradable quote");
+        }
 
-        await db.quoteSnapshot.create({
-          data: {
+        const timestamp = new Date(quote.timestamp * 1000);
+        const snapshot = {
+          price: quote.price,
+          change: quote.change,
+          changePct: quote.changePct,
+          volume: quote.volume,
+          high: quote.high,
+          low: quote.low,
+          open: quote.open,
+          prevClose: quote.prevClose,
+        };
+
+        // Provider timestamps can remain unchanged outside active trading.
+        // Upsert makes repeated polls idempotent instead of violating the
+        // @@unique([symbolId, timestamp]) database constraint.
+        await db.quoteSnapshot.upsert({
+          where: {
+            symbolId_timestamp: { symbolId, timestamp },
+          },
+          update: snapshot,
+          create: {
             symbolId,
-            price: quote.price,
-            change: quote.change,
-            changePct: quote.changePct,
-            volume: quote.volume,
-            high: quote.high,
-            low: quote.low,
-            open: quote.open,
-            prevClose: quote.prevClose,
-            timestamp: new Date(quote.timestamp * 1000),
+            timestamp,
+            ...snapshot,
           },
         });
         successCount++;
       } catch (err) {
-        console.error(`  [FAIL] ${ticker}:`, err instanceof Error ? err.message : err);
+        const message = err instanceof Error ? err.message : String(err);
+        failures.push({ symbol: ticker, error: message });
+        console.error(`  [FAIL] ${ticker}:`, message);
       }
     }
+
+    const status = classifyJobRun(SYMBOLS.length, successCount);
 
     await db.jobRun.update({
       where: { id: jobRun.id },
       data: {
-        status: "success",
+        status,
         endedAt: new Date(),
-        metadata: { symbolsPolled: SYMBOLS.length, succeeded: successCount },
+        metadata: {
+          symbolsPolled: SYMBOLS.length,
+          succeeded: successCount,
+          failed: failures.length,
+          failures,
+          quoteVolumeSource: "Finnhub /quote does not provide volume; stored value is 0",
+        },
       },
     });
 
     console.log(
-      `[${new Date().toISOString()}] Polled ${successCount}/${SYMBOLS.length} symbols`,
+      `[${new Date().toISOString()}] Poll ${status}: ${successCount}/${SYMBOLS.length} symbols`,
     );
   } catch (err) {
     await db.jobRun.update({
@@ -96,25 +137,50 @@ async function pollOnce() {
   }
 }
 
-async function main() {
-  console.log(`Starting quote poller — interval ${POLL_INTERVAL}ms, symbols: ${SYMBOLS.join(", ")}`);
-  await ensureSymbolsExist(SYMBOLS);
-  await pollOnce(); // First run immediately
-  const intervalId = setInterval(pollOnce, POLL_INTERVAL);
+async function tick() {
+  if (shuttingDown) return;
 
-  // Graceful shutdown
-  const shutdown = async () => {
-    console.log("Shutting down poller...");
-    clearInterval(intervalId);
-    await db.$disconnect();
-    process.exit(0);
-  };
-  process.on("SIGTERM", shutdown);
-  process.on("SIGINT", shutdown);
+  activePoll = pollOnce();
+  try {
+    await activePoll;
+  } finally {
+    activePoll = null;
+  }
+
+  if (!shuttingDown) {
+    // Schedule only after the previous cycle completes, preventing overlap.
+    timer = setTimeout(() => void tick(), POLL_INTERVAL);
+  }
 }
+
+async function shutdown() {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+  shuttingDown = true;
+  if (timer) clearTimeout(timer);
+
+  console.log("Shutting down poller...");
+  if (activePoll) await activePoll;
+  await db.$disconnect();
+}
+
+async function main() {
+  console.log(
+    `Starting quote poller — interval ${POLL_INTERVAL}ms, symbols: ${SYMBOLS.join(", ")}`,
+  );
+  await ensureSymbolsExist(SYMBOLS);
+  await tick();
+}
+
+process.once("SIGTERM", () => {
+  void shutdown().finally(() => process.exit(0));
+});
+process.once("SIGINT", () => {
+  void shutdown().finally(() => process.exit(0));
+});
 
 main().catch(async (err) => {
   console.error("Fatal error:", err);
-  await db.$disconnect();
+  await shutdown();
   process.exit(1);
 });

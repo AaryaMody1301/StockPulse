@@ -3,6 +3,7 @@ import { marketData } from "@/lib/providers";
 import { z } from "zod";
 import { REVALIDATE } from "@/lib/constants";
 import { rateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/request";
 
 const querySchema = z.object({
   category: z
@@ -11,8 +12,7 @@ const querySchema = z.object({
 });
 
 export async function GET(request: NextRequest) {
-  const ip = request.headers.get("x-forwarded-for") ?? "unknown";
-  const limited = rateLimit(ip);
+  const limited = rateLimit(getClientIp(request.headers));
   if (limited) return limited;
 
   const { searchParams } = request.nextUrl;
@@ -25,10 +25,8 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const category = parsed.data.category;
-
   try {
-    const news = await marketData.getMarketNews(category);
+    const news = await marketData.getMarketNews(parsed.data.category);
     return NextResponse.json(
       { data: news },
       {

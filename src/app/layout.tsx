@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     template: "%s | InvestSmart",
   },
   description:
-    "Smart stock market analytics with real-time prices, interactive charts, portfolio tracking, watchlists, and market news. Invest smarter.",
+    "Stock market analytics with current prices, interactive charts, portfolio tracking, watchlists, and market news.",
 };
 
 export default function RootLayout({

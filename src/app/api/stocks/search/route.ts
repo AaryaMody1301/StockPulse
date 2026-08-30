@@ -3,18 +3,17 @@ import { marketData } from "@/lib/providers";
 import { z } from "zod";
 import { REVALIDATE } from "@/lib/constants";
 import { rateLimit } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/request";
 
 const querySchema = z.object({
-  q: z.string().min(1).max(50),
+  q: z.string().trim().min(1).max(50),
 });
 
 export async function GET(request: NextRequest) {
-  const ip = request.headers.get("x-forwarded-for") ?? "unknown";
-  const limited = rateLimit(ip);
+  const limited = rateLimit(getClientIp(request.headers));
   if (limited) return limited;
-  const { searchParams } = request.nextUrl;
-  const parsed = querySchema.safeParse({ q: searchParams.get("q") });
 
+  const parsed = querySchema.safeParse({ q: request.nextUrl.searchParams.get("q") });
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Missing or invalid query parameter 'q'." },

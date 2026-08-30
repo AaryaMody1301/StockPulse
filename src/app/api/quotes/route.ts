@@ -1,33 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { marketData } from "@/lib/providers";
-import { z } from "zod";
 import { REVALIDATE } from "@/lib/constants";
 import { rateLimit } from "@/lib/rate-limit";
-
-const querySchema = z.object({
-  symbols: z
-    .string()
-    .min(1)
-    .transform((s) => s.split(",").map((t) => t.trim().toUpperCase()))
-    .pipe(z.array(z.string().min(1).max(10)).min(1).max(30)),
-});
+import { getClientIp } from "@/lib/request";
+import { normalizeStockSymbols } from "@/lib/symbols";
 
 export async function GET(request: NextRequest) {
-  const ip = request.headers.get("x-forwarded-for") ?? "unknown";
-  const limited = rateLimit(ip);
+  const limited = rateLimit(getClientIp(request.headers));
   if (limited) return limited;
-  const { searchParams } = request.nextUrl;
-  const parsed = querySchema.safeParse({ symbols: searchParams.get("symbols") });
 
-  if (!parsed.success) {
+  const rawSymbols = request.nextUrl.searchParams.get("symbols");
+  if (!rawSymbols) {
     return NextResponse.json(
       { error: "Invalid symbols parameter. Provide comma-separated tickers." },
       { status: 400 },
     );
   }
 
+  let symbols: string[];
   try {
-    const quotes = await marketData.getQuotes(parsed.data.symbols);
+    symbols = normalizeStockSymbols(rawSymbols.split(","), 30);
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid symbols parameter. Provide 1-30 valid ticker symbols." },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const quotes = await marketData.getQuotes(symbols);
     return NextResponse.json(
       { data: quotes },
       {
