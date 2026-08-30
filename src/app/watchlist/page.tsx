@@ -6,6 +6,7 @@ import { useWatchlist } from "@/hooks/use-watchlist";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PriceChange, formatPrice, formatVolume } from "@/components/markets/quote-helpers";
+import { WatchlistResearchDigest } from "@/components/research/watchlist-research-digest";
 import {
   Table,
   TableBody,
@@ -30,23 +31,20 @@ export default function WatchlistPage() {
     }
     setLoading(true);
     try {
-      const res = await fetch(
-        `/api/quotes?symbols=${symbols.join(",")}`,
-      );
+      const res = await fetch(`/api/quotes?symbols=${symbols.join(",")}`);
       if (res.ok) {
         const json = await res.json();
         setQuotes(json.data || []);
       }
     } catch {
-      // keep existing quotes on error
+      // Keep the last successful quotes visible on transient errors.
     } finally {
       setLoading(false);
     }
   }, [symbols]);
 
-  // Fetch on mount + whenever symbols change
   useEffect(() => {
-    fetchQuotes();
+    void fetchQuotes();
   }, [fetchQuotes]);
 
   if (symbols.length === 0) {
@@ -60,9 +58,7 @@ export default function WatchlistPage() {
               </div>
               <div>
                 <h1 className="text-3xl font-bold tracking-tight">Watchlist</h1>
-                <p className="text-muted-foreground">
-                  Track your favorite stocks in one place
-                </p>
+                <p className="text-muted-foreground">Track companies you want to review in one place</p>
               </div>
             </div>
           </section>
@@ -71,10 +67,9 @@ export default function WatchlistPage() {
             <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-2xl bg-muted/50">
               <Star className="h-10 w-10 text-muted-foreground/30" />
             </div>
-            <h2 className="text-xl font-semibold mb-2">Your watchlist is empty</h2>
-            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-              Start adding stocks to your watchlist by clicking the star icon on any
-              stock page, or search for stocks to add.
+            <h2 className="mb-2 text-xl font-semibold">Your watchlist is empty</h2>
+            <p className="mx-auto mb-6 max-w-md text-muted-foreground">
+              Add companies from a stock page, then create a thesis if you want StockPulse to track new stored evidence since your last review.
             </p>
             <Link href="/">
               <Button size="lg" className="shadow-lg shadow-primary/25">
@@ -96,106 +91,100 @@ export default function WatchlistPage() {
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
               <Eye className="h-6 w-6 text-primary" />
             </div>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Watchlist</h1>
-            <p className="text-muted-foreground">
-              {symbols.length} stock{symbols.length !== 1 ? "s" : ""} tracked
-            </p>
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Watchlist</h1>
+              <p className="text-muted-foreground">
+                {symbols.length} stock{symbols.length !== 1 ? "s" : ""} tracked
+              </p>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <RefreshCountdown interval={30} onRefresh={fetchQuotes} loading={loading} />
-          <Button variant="outline" size="sm" onClick={fetchQuotes} disabled={loading}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-        </div>
-      </section>
+          <div className="flex items-center gap-3">
+            <RefreshCountdown interval={30} onRefresh={fetchQuotes} loading={loading} />
+            <Button variant="outline" size="sm" onClick={fetchQuotes} disabled={loading}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
+        </section>
 
-      {/* Summary Cards */}
-      {quotes.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <SummaryCard
-            label="Total Stocks"
-            value={String(quotes.length)}
-          />
-          <SummaryCard
-            label="Gainers"
-            value={String(quotes.filter((q) => q.change > 0).length)}
-            className="text-emerald-500"
-          />
-          <SummaryCard
-            label="Losers"
-            value={String(quotes.filter((q) => q.change < 0).length)}
-            className="text-red-500"
-          />
-          <SummaryCard
-            label="Avg Change"
-            value={`${(quotes.reduce((s, q) => s + q.changePct, 0) / quotes.length).toFixed(2)}%`}
-            className={
-              quotes.reduce((s, q) => s + q.changePct, 0) >= 0
-                ? "text-emerald-500"
-                : "text-red-500"
-            }
-          />
-        </div>
-      )}
+        {quotes.length > 0 && (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <SummaryCard label="Total Stocks" value={String(quotes.length)} />
+            <SummaryCard
+              label="Gainers"
+              value={String(quotes.filter((q) => q.change > 0).length)}
+              className="text-emerald-500"
+            />
+            <SummaryCard
+              label="Losers"
+              value={String(quotes.filter((q) => q.change < 0).length)}
+              className="text-red-500"
+            />
+            <SummaryCard
+              label="Avg Change"
+              value={`${(quotes.reduce((sum, quote) => sum + quote.changePct, 0) / quotes.length).toFixed(2)}%`}
+              className={
+                quotes.reduce((sum, quote) => sum + quote.changePct, 0) >= 0
+                  ? "text-emerald-500"
+                  : "text-red-500"
+              }
+            />
+          </div>
+        )}
 
-      {/* Quotes Table */}
-      <div className="rounded-lg border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[100px]">Symbol</TableHead>
-              <TableHead className="text-right">Price</TableHead>
-              <TableHead className="text-right">Change</TableHead>
-              <TableHead className="hidden text-right sm:table-cell">Volume</TableHead>
-              <TableHead className="hidden text-right md:table-cell">High</TableHead>
-              <TableHead className="hidden text-right md:table-cell">Low</TableHead>
-              <TableHead className="w-[60px]"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {quotes.map((q) => (
-              <TableRow key={q.symbol} className="hover:bg-muted/50">
-                <TableCell className="font-semibold">
-                  <Link
-                    href={`/stocks/${q.symbol}`}
-                    className="hover:underline"
-                  >
-                    {q.symbol}
-                  </Link>
-                </TableCell>
-                <TableCell className="text-right font-mono tabular-nums">
-                  {formatPrice(q.price)}
-                </TableCell>
-                <TableCell className="text-right">
-                  <PriceChange change={q.change} changePct={q.changePct} />
-                </TableCell>
-                <TableCell className="hidden text-right font-mono tabular-nums sm:table-cell">
-                  {formatVolume(q.volume)}
-                </TableCell>
-                <TableCell className="hidden text-right font-mono tabular-nums md:table-cell">
-                  {formatPrice(q.high)}
-                </TableCell>
-                <TableCell className="hidden text-right font-mono tabular-nums md:table-cell">
-                  {formatPrice(q.low)}
-                </TableCell>
-                <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    onClick={() => remove(q.symbol)}
-                    className="text-muted-foreground hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </TableCell>
+        <WatchlistResearchDigest symbols={symbols} />
+
+        <div className="rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[100px]">Symbol</TableHead>
+                <TableHead className="text-right">Price</TableHead>
+                <TableHead className="text-right">Change</TableHead>
+                <TableHead className="hidden text-right sm:table-cell">Volume</TableHead>
+                <TableHead className="hidden text-right md:table-cell">High</TableHead>
+                <TableHead className="hidden text-right md:table-cell">Low</TableHead>
+                <TableHead className="w-[60px]"></TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+            </TableHeader>
+            <TableBody>
+              {quotes.map((quote) => (
+                <TableRow key={quote.symbol} className="hover:bg-muted/50">
+                  <TableCell className="font-semibold">
+                    <Link href={`/stocks/${quote.symbol}`} className="hover:underline">
+                      {quote.symbol}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular-nums">
+                    {formatPrice(quote.price)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <PriceChange change={quote.change} changePct={quote.changePct} />
+                  </TableCell>
+                  <TableCell className="hidden text-right font-mono tabular-nums sm:table-cell">
+                    {formatVolume(quote.volume)}
+                  </TableCell>
+                  <TableCell className="hidden text-right font-mono tabular-nums md:table-cell">
+                    {formatPrice(quote.high)}
+                  </TableCell>
+                  <TableCell className="hidden text-right font-mono tabular-nums md:table-cell">
+                    {formatPrice(quote.low)}
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={() => remove(quote.symbol)}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     </div>
   );
