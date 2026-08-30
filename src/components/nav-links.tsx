@@ -2,11 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { TrendingUp, Newspaper, Briefcase, BarChart3, GitCompareArrows } from "lucide-react";
+import {
+  TrendingUp,
+  Newspaper,
+  Briefcase,
+  BarChart3,
+  GitCompareArrows,
+  NotebookTabs,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_LINKS = [
   { href: "/", label: "Markets", icon: BarChart3 },
+  { href: "/research", label: "Research", icon: NotebookTabs },
   { href: "/news", label: "News", icon: Newspaper },
   { href: "/watchlist", label: "Watchlist", icon: TrendingUp },
   { href: "/portfolio", label: "Portfolio", icon: Briefcase },
