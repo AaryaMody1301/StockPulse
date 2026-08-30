@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, phase-1-foundation-hardening]
+    branches: [main, phase-1-foundation-hardening, phase-2-canonical-data-sec-evidence, phase-3-thesis-workspace]
   pull_request:
-    branches: [main]
+    branches: [main, phase-1-foundation-hardening, phase-2-canonical-data-sec-evidence]
 
 permissions:
   contents: read

@@ -15,15 +15,20 @@ model Symbol {
   name      String   @db.VarChar(200)
   exchange  String   @db.VarChar(20)
   type      String   @default("Common Stock") @db.VarChar(50)
+  cik       String?  @db.VarChar(10)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  quotes    QuoteSnapshot[]
-  dailyBars DailyBar[]
-  profile   CompanyProfile?
+  quotes     QuoteSnapshot[]
+  dailyBars  DailyBar[]
+  profile    CompanyProfile?
+  secFilings SecFiling[]
+  secFacts   SecFact[]
+  secMetrics SecMetric[]
 
   @@index([exchange])
+  @@index([cik])
   @@map("symbols")
 }
 
@@ -98,6 +103,81 @@ model MarketNews {
   @@index([publishedAt])
   @@index([category])
   @@map("market_news")
+}
+
+model SecFiling {
+  id              Int       @id @default(autoincrement())
+  symbolId        Int
+  cik             String    @db.VarChar(10)
+  accessionNumber String    @unique @db.VarChar(30)
+  form            String    @db.VarChar(20)
+  filedAt         DateTime  @db.Date
+  reportDate      DateTime? @db.Date
+  acceptedAt      DateTime?
+  primaryDocument String?   @db.VarChar(500)
+  sourceUrl       String    @db.VarChar(1000)
+  ingestedAt      DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  symbol Symbol @relation(fields: [symbolId], references: [id], onDelete: Cascade)
+
+  @@index([symbolId, filedAt])
+  @@index([cik, filedAt])
+  @@index([form, filedAt])
+  @@map("sec_filings")
+}
+
+model SecFact {
+  factKey         String    @id @db.VarChar(64)
+  symbolId        Int
+  cik             String    @db.VarChar(10)
+  taxonomy        String    @db.VarChar(30)
+  concept         String    @db.VarChar(200)
+  label           String?   @db.VarChar(500)
+  description     String?   @db.Text
+  unit            String    @db.VarChar(50)
+  value           Decimal   @db.Decimal(38, 10)
+  startDate       DateTime? @db.Date
+  endDate         DateTime  @db.Date
+  filedAt         DateTime? @db.Date
+  accessionNumber String    @db.VarChar(30)
+  form            String    @db.VarChar(20)
+  frame           String?   @db.VarChar(30)
+  fiscalYear      Int?
+  fiscalPeriod    String?   @db.VarChar(10)
+  ingestedAt      DateTime  @default(now())
+
+  symbol Symbol @relation(fields: [symbolId], references: [id], onDelete: Cascade)
+
+  @@index([symbolId, concept, endDate])
+  @@index([symbolId, accessionNumber])
+  @@index([cik, endDate])
+  @@map("sec_facts")
+}
+
+model SecMetric {
+  metricKey       String    @id @db.VarChar(64)
+  symbolId        Int
+  metric          String    @db.VarChar(50)
+  value           Decimal   @db.Decimal(38, 10)
+  unit            String    @db.VarChar(50)
+  startDate       DateTime? @db.Date
+  endDate         DateTime  @db.Date
+  filedAt         DateTime? @db.Date
+  accessionNumber String    @db.VarChar(30)
+  form            String    @db.VarChar(20)
+  taxonomy        String    @db.VarChar(30)
+  concept         String    @db.VarChar(200)
+  frame           String?   @db.VarChar(30)
+  fiscalYear      Int?
+  fiscalPeriod    String?   @db.VarChar(10)
+  computedAt      DateTime  @default(now())
+
+  symbol Symbol @relation(fields: [symbolId], references: [id], onDelete: Cascade)
+
+  @@index([symbolId, metric, endDate])
+  @@index([symbolId, accessionNumber])
+  @@map("sec_metrics")
 }
 
 model JobRun {
