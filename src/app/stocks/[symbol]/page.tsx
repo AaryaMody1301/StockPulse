@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft, Newspaper, Building2, TrendingUp } from "lucide-react";
 import { marketData } from "@/lib/providers";
+import { canonicalMarket } from "@/lib/market/repository";
+import { getStoredSecEvidence } from "@/lib/sec/repository";
 import type {
   CompanyProfileData,
   DailyBarData,
@@ -14,9 +16,9 @@ import { PriceChange, formatPrice, formatMarketCap } from "@/components/markets/
 import { ChartWithRange } from "@/components/charts/chart-with-range";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { WatchlistButton } from "@/components/watchlist-button";
 import { AddToPortfolioButton } from "@/components/add-to-portfolio-button";
+import { SecEvidencePanel } from "@/components/research/sec-evidence-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +31,7 @@ export async function generateMetadata({ params }: StockPageProps): Promise<Meta
   const ticker = symbol.toUpperCase();
   return {
     title: `${ticker} Stock Price`,
-    description: `Live price, chart, and company details for ${ticker}`,
+    description: `Latest price, chart, company details, and stored SEC evidence for ${ticker}`,
   };
 }
 
@@ -41,8 +43,6 @@ function StatItem({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-
-/* ── Presentation components (sync, receive pre-fetched data) ── */
 
 function StockHeader({
   symbol,
@@ -56,7 +56,6 @@ function StockHeader({
   const isPositive = quote.changePct >= 0;
   return (
     <div className="relative overflow-hidden rounded-2xl border border-border/40 bg-gradient-to-br from-card via-card to-primary/5 p-6 sm:p-8">
-      {/* Background accent */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className={`absolute -top-24 -right-24 h-64 w-64 rounded-full blur-3xl ${isPositive ? "bg-emerald-500/5" : "bg-red-500/5"}`} />
       </div>
@@ -98,7 +97,6 @@ function StockHeader({
           </div>
         </div>
 
-        {/* Key Stats */}
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatItem label="Open" value={formatPrice(quote.open)} />
           <StatItem label="High" value={formatPrice(quote.high)} />
@@ -279,8 +277,6 @@ function RelatedStocks({
   );
 }
 
-/* ── Main page: prefetch ALL data in one parallel batch ── */
-
 export default async function StockPage({ params }: StockPageProps) {
   const { symbol: rawSymbol } = await params;
   const symbol = rawSymbol.toUpperCase();
@@ -291,42 +287,41 @@ export default async function StockPage({ params }: StockPageProps) {
   oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
   const from = oneYearAgo.toISOString().slice(0, 10);
 
-  // Fire ALL external API calls in parallel — one round-trip, not 6 sequential ones
-  const [quoteResult, profileResult, barsResult, newsResult] =
+  const [quoteResult, profileResult, barsResult, newsResult, evidenceResult] =
     await Promise.allSettled([
-      marketData.getQuote(symbol),
-      marketData.getCompanyProfile(symbol),
-      marketData.getDailyBars(symbol, from, to),
+      canonicalMarket.getQuote(symbol),
+      canonicalMarket.getCompanyProfile(symbol),
+      canonicalMarket.getDailyBars(symbol, from, to),
       marketData.getCompanyNews(symbol),
+      getStoredSecEvidence(symbol),
     ]);
 
-  const quote =
-    quoteResult.status === "fulfilled" ? quoteResult.value : null;
-  const profile =
-    profileResult.status === "fulfilled" ? profileResult.value : null;
-  const bars =
-    barsResult.status === "fulfilled" ? barsResult.value : [];
-  const news =
-    newsResult.status === "fulfilled" ? newsResult.value : [];
+  const quote = quoteResult.status === "fulfilled" ? quoteResult.value : null;
+  const profile = profileResult.status === "fulfilled" ? profileResult.value : null;
+  const bars = barsResult.status === "fulfilled" ? barsResult.value : [];
+  const news = newsResult.status === "fulfilled" ? newsResult.value : [];
+  const evidence = evidenceResult.status === "fulfilled" ? evidenceResult.value : null;
 
-  // All API calls failed — show not-found only if quote truly returned null/zero price
-  // (not just a network error)
   if (!quote) {
-    // If the quote call was rejected (API error), don't 404 — show degraded page
     if (quoteResult.status === "rejected") {
       return (
-        <div className="mx-auto max-w-7xl space-y-8 px-4 py-16 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-2xl font-bold">{symbol}</h1>
-          <p className="text-muted-foreground">
-            Unable to load stock data right now. Please try again later.
-          </p>
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Markets
-          </Link>
+        <div className="gradient-mesh">
+          <div className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
+            <Link
+              href="/"
+              className="group inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
+              Back to Markets
+            </Link>
+            <div className="rounded-2xl border border-border/50 bg-card p-6 sm:p-8">
+              <h1 className="text-3xl font-bold">{symbol}</h1>
+              <p className="mt-2 text-muted-foreground">
+                Latest market data is unavailable right now. Stored SEC evidence remains available below when it has been ingested.
+              </p>
+            </div>
+            <SecEvidencePanel evidence={evidence} />
+          </div>
         </div>
       );
     }
@@ -334,7 +329,6 @@ export default async function StockPage({ params }: StockPageProps) {
   }
   if (quote.price === 0) notFound();
 
-  // Fetch related stocks (depends on profile.industry, so runs after the main batch)
   let related: SymbolSearchResult[] = [];
   if (profile?.industry) {
     try {
@@ -343,14 +337,13 @@ export default async function StockPage({ params }: StockPageProps) {
         .filter((r) => r.symbol !== symbol && r.type === "Common Stock")
         .slice(0, 5);
     } catch {
-      // non-critical — leave empty
+      // Non-critical: related stocks are supplemental.
     }
   }
 
   return (
     <div className="gradient-mesh">
       <div className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
-        {/* Back Link */}
         <Link
           href="/"
           className="group inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -359,16 +352,11 @@ export default async function StockPage({ params }: StockPageProps) {
           Back to Markets
         </Link>
 
-        {/* Header + Stats */}
         <StockHeader symbol={symbol} quote={quote} profile={profile} />
-
-        {/* Chart with time range */}
         <StockChart symbol={symbol} bars={bars} />
-
-        {/* Company About */}
+        <SecEvidencePanel evidence={evidence} />
         <CompanyAbout symbol={symbol} profile={profile} />
 
-        {/* Two-column: News + Related */}
         <div className="grid gap-6 lg:grid-cols-2">
           <StockNews news={news} />
           <RelatedStocks related={related} />
