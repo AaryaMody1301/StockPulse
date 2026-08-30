@@ -1,11 +1,10 @@
 // Hostinger Node.js entry point
-// Set this as the "Application startup file" in Hostinger's Node.js panel
+// Set this as the "Application startup file" in Hostinger's Node.js panel.
 const { createServer } = require("http");
 const { parse } = require("url");
 const path = require("path");
 const fs = require("fs");
 
-// Check if the build exists
 const dotNextPath = path.join(__dirname, ".next");
 if (!fs.existsSync(dotNextPath)) {
   console.error("ERROR: .next directory not found. Run 'npm run build' first.");
@@ -26,10 +25,10 @@ app
       const parsedUrl = parse(req.url, true);
       handle(req, res, parsedUrl);
     }).listen(port, "0.0.0.0", () => {
-      console.log(`> InvestSmart ready on port ${port}`);
+      console.log(`> StockPulse ready on port ${port}`);
     });
   })
   .catch((err) => {
-    console.error("Failed to start InvestSmart:", err);
+    console.error("Failed to start StockPulse:", err);
     process.exit(1);
   });
