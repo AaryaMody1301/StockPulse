@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, RefreshCw, SearchCheck } from "lucide-react";
+import { AiAnalysisPanel } from "@/components/research/ai-analysis-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -171,6 +172,10 @@ export function ResearchReviewPanel({
             </Link>
           )}
         </div>
+
+        {record && record.symbol === draft.symbol.trim().toUpperCase() && (
+          <AiAnalysisPanel symbol={record.symbol} mode="challenge" thesis={draft} />
+        )}
       </CardContent>
     </Card>
   );
