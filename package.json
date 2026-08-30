@@ -1,5 +1,5 @@
 {
-  "name": "investsmart",
+  "name": "stockpulse",
   "version": "0.1.0",
   "private": true,
   "engines": {
@@ -51,5 +51,8 @@
     "shadcn": "4.0.2",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "deepmerge-ts": "8.0.2"
   }
 }
