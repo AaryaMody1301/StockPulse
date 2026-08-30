@@ -1,14 +1,10 @@
 import assert from "node:assert/strict";
-import test, { after } from "node:test";
-import { db } from "../src/lib/db";
+import test from "node:test";
 
 const hasDatabase = Boolean(process.env.DATABASE_URL?.trim());
 
-after(async () => {
-  if (hasDatabase) await db.$disconnect();
-});
-
 test("PostgreSQL schema supports idempotent SEC filing writes", { skip: !hasDatabase }, async () => {
+  const { db } = await import("../src/lib/db");
   const suffix = Date.now().toString().slice(-6);
   const ticker = `CI${suffix}`.slice(0, 10);
   const accessionNumber = `0000000000-26-${suffix.padStart(6, "0")}`;
@@ -44,5 +40,6 @@ test("PostgreSQL schema supports idempotent SEC filing writes", { skip: !hasData
     assert.equal(await db.secFiling.count({ where: { accessionNumber } }), 1);
   } finally {
     await db.symbol.delete({ where: { id: symbol.id } });
+    await db.$disconnect();
   }
 });
