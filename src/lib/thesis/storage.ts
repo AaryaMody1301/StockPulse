@@ -1,5 +1,6 @@
 "use client";
 
+import { normalizeStockSymbol } from "@/lib/symbols";
 import {
   thesisExportBundleSchema,
   thesisRecordSchema,
@@ -88,6 +89,11 @@ export async function saveThesis(
   existing: ThesisRecord | null,
   revisionNote = "Updated thesis",
 ): Promise<ThesisRecord> {
+  const normalizedSymbol = normalizeStockSymbol(draft.symbol);
+  if (existing && normalizedSymbol !== existing.symbol) {
+    throw new Error("A saved thesis ticker cannot be changed. Create a new thesis for another company.");
+  }
+
   const snapshot = thesisSnapshot(draft);
   const now = new Date().toISOString();
 
@@ -107,7 +113,7 @@ export async function saveThesis(
   const record = thesisRecordSchema.parse({
     ...snapshot,
     id: existing?.id || id("thesis"),
-    symbol: draft.symbol,
+    symbol: normalizedSymbol,
     createdAt: existing?.createdAt || now,
     updatedAt: now,
     revisions: revisions.slice(0, MAX_REVISIONS),
@@ -130,9 +136,11 @@ export async function markThesisReviewed(
 
   const reviewedEvidenceIds = [...new Set(evidenceIds.map((value) => value.trim()).filter(Boolean))]
     .slice(0, MAX_REVIEWED_EVIDENCE);
+  const now = new Date().toISOString();
   const record = thesisRecordSchema.parse({
     ...existing,
-    lastReviewedAt: new Date().toISOString(),
+    updatedAt: now,
+    lastReviewedAt: now,
     reviewedEvidenceIds,
   });
 
