@@ -1,4 +1,5 @@
-import { ArrowDownRight, ArrowRight, ArrowUpRight } from "lucide-react";
+import Link from "next/link";
+import { ArrowDownRight, ArrowRight, ArrowUpRight, BrainCircuit } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { StoredMetricChanges } from "@/lib/change-intelligence/repository";
@@ -37,9 +38,18 @@ export function SecChangePanel({ changes }: { changes: StoredMetricChanges | nul
   return (
     <Card className="overflow-hidden border-border/50">
       <CardHeader className="border-b border-border/40 bg-muted/20">
-        <CardTitle className="flex items-center justify-between gap-3 text-base">
+        <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-base">
           <span>What changed in reported metrics</span>
-          <Badge variant="outline">Deterministic</Badge>
+          <span className="flex items-center gap-2">
+            <Badge variant="outline">Deterministic</Badge>
+            <Link
+              href={`/stocks/${changes.symbol}/grounding`}
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+            >
+              <BrainCircuit className="h-3.5 w-3.5" />
+              AI grounding
+            </Link>
+          </span>
         </CardTitle>
       </CardHeader>
       <CardContent className="divide-y divide-border/40 p-0">
