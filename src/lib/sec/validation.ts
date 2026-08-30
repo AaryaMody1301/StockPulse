@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+const secAccessionSchema = z.string().trim().regex(/^\d{10}-\d{2}-\d{6}$/);
+
 export const secTickerEntrySchema = z.object({
   cik_str: z.number().int().nonnegative(),
   ticker: z.string().min(1),
@@ -9,7 +11,7 @@ export const secTickerEntrySchema = z.object({
 export const secTickerMapSchema = z.record(z.string(), secTickerEntrySchema);
 
 export const secFilingColumnsSchema = z.object({
-  accessionNumber: z.array(z.string()),
+  accessionNumber: z.array(secAccessionSchema),
   filingDate: z.array(z.string()),
   reportDate: z.array(z.string()),
   acceptanceDateTime: z.array(z.string()),
@@ -41,7 +43,7 @@ export const secFactUnitSchema = z.object({
   start: z.string().optional(),
   end: z.string(),
   val: z.union([z.number(), z.string()]),
-  accn: z.string(),
+  accn: secAccessionSchema,
   fy: z.number().int().optional(),
   fp: z.string().optional(),
   form: z.string(),
