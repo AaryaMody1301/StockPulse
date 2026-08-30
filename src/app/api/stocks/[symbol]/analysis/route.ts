@@ -36,9 +36,17 @@ export async function POST(request: NextRequest, { params }: AnalysisRouteProps)
   const limited = rateLimit(getClientIp(request.headers), { windowMs: 60_000, max: 10 });
   if (limited) return limited;
 
-  if (!getAiConfiguration()) {
+  try {
+    if (!getAiConfiguration()) {
+      return NextResponse.json(
+        { available: false, error: "AI analysis is not configured. Deterministic evidence remains available." },
+        { status: 503 },
+      );
+    }
+  } catch (error) {
+    console.error("[Grounded Analysis API] Invalid AI configuration:", error instanceof Error ? error.message : error);
     return NextResponse.json(
-      { available: false, error: "AI analysis is not configured. Deterministic evidence remains available." },
+      { available: false, error: "AI analysis configuration is invalid. Deterministic evidence remains available." },
       { status: 503 },
     );
   }
