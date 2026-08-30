@@ -6,7 +6,7 @@ const MAX_TRACKED_CLIENTS = 10_000;
 /**
  * Simple in-memory sliding-window rate limiter.
  *
- * Phase 1 deliberately runs one web process. This state is not coordinated
+ * Production currently runs one web process. This state is not coordinated
  * across multiple processes; see docs/OPERATIONS.md before scaling out.
  */
 export function rateLimit(
@@ -19,7 +19,6 @@ export function rateLimit(
   const recent = timestamps.filter((timestamp) => timestamp > windowStart);
 
   if (!hits.has(ip) && hits.size >= MAX_TRACKED_CLIENTS) {
-    // Bound memory even when many one-off client identifiers are observed.
     const oldestKey = hits.keys().next().value;
     if (oldestKey !== undefined) hits.delete(oldestKey);
   }
