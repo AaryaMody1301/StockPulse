@@ -1,3 +1,4 @@
+import type { ZodType } from "zod";
 import {
   parseSecPayload,
   secCompanyFactsSchema,
@@ -96,7 +97,7 @@ function shouldRetry(error: unknown): boolean {
 async function fetchSecJson<T>(
   url: string,
   endpoint: string,
-  schema: Parameters<typeof parseSecPayload<T>>[0],
+  schema: ZodType<T>,
 ): Promise<T> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
