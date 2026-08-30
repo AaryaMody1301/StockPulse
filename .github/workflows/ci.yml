@@ -49,7 +49,7 @@ jobs:
         run: npm ci
 
       - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=critical
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Apply database migrations
         run: npx prisma migrate deploy --schema=prisma/schema.prisma
