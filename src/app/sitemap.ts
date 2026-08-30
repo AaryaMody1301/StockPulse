@@ -1,11 +1,11 @@
 import type { MetadataRoute } from "next";
+import { absoluteAppUrl } from "@/lib/app-url";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  return [
-    { url: "/", changeFrequency: "hourly", priority: 1 },
-    { url: "/news", changeFrequency: "hourly", priority: 0.8 },
-    { url: "/watchlist", changeFrequency: "daily", priority: 0.6 },
-    { url: "/portfolio", changeFrequency: "daily", priority: 0.6 },
-    { url: "/compare", changeFrequency: "daily", priority: 0.7 },
-  ];
+  const routes = ["/", "/news", "/compare", "/watchlist", "/portfolio", "/research"];
+  return routes.map((path) => ({
+    url: absoluteAppUrl(path),
+    changeFrequency: path === "/" || path === "/news" ? "hourly" : "daily",
+    priority: path === "/" ? 1 : path === "/research" ? 0.9 : 0.7,
+  }));
 }
