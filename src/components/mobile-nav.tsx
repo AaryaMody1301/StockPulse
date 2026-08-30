@@ -8,6 +8,7 @@ import {
   Briefcase,
   BarChart3,
   GitCompareArrows,
+  NotebookTabs,
   Menu,
   X,
 } from "lucide-react";
@@ -15,6 +16,7 @@ import { Button } from "@/components/ui/button";
 
 const NAV_LINKS = [
   { href: "/", label: "Markets", icon: BarChart3 },
+  { href: "/research", label: "Research", icon: NotebookTabs },
   { href: "/news", label: "News", icon: Newspaper },
   { href: "/watchlist", label: "Watchlist", icon: TrendingUp },
   { href: "/portfolio", label: "Portfolio", icon: Briefcase },
