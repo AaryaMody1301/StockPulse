@@ -13,6 +13,7 @@ const DB_NAME = "stockpulse-research";
 const DB_VERSION = 1;
 const THESIS_STORE = "theses";
 const MAX_REVISIONS = 50;
+const MAX_REVIEWED_EVIDENCE = 250;
 
 function id(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`;
@@ -110,6 +111,29 @@ export async function saveThesis(
     createdAt: existing?.createdAt || now,
     updatedAt: now,
     revisions: revisions.slice(0, MAX_REVISIONS),
+    lastReviewedAt: existing?.lastReviewedAt ?? null,
+    reviewedEvidenceIds: existing?.reviewedEvidenceIds ?? [],
+  });
+
+  await withStore("readwrite", async (store) => {
+    await requestResult(store.put(record));
+  });
+  return record;
+}
+
+export async function markThesisReviewed(
+  recordId: string,
+  evidenceIds: string[],
+): Promise<ThesisRecord> {
+  const existing = await getThesis(recordId);
+  if (!existing) throw new Error("Thesis record was not found");
+
+  const reviewedEvidenceIds = [...new Set(evidenceIds.map((value) => value.trim()).filter(Boolean))]
+    .slice(0, MAX_REVIEWED_EVIDENCE);
+  const record = thesisRecordSchema.parse({
+    ...existing,
+    lastReviewedAt: new Date().toISOString(),
+    reviewedEvidenceIds,
   });
 
   await withStore("readwrite", async (store) => {
