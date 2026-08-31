@@ -85,12 +85,14 @@ export const twelvedata: MarketDataProvider = {
 
   async getDailyBars(symbol: string, from: string, to: string): Promise<DailyBarData[]> {
     return cacheGetOrFetch(`td:bars:${symbol}:${from}:${to}`, REVALIDATE.profile, async () => {
+      // Twelve Data documents that outputsize restricts an explicitly bounded
+      // start_date/end_date request. Omitting it preserves the full requested
+      // range (subject to the provider's 5,000-point maximum).
       const payload = await fetchTwelveData("/time_series", {
         symbol,
         interval: "1day",
         start_date: from,
         end_date: to,
-        outputsize: "365",
       });
       const data = parseProviderPayload(twelveDataTimeSeriesSchema, payload, "Twelve Data", "/time_series");
       return data.values

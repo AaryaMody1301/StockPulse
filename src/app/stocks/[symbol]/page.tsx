@@ -5,6 +5,7 @@ import { ArrowLeft, Newspaper, Building2, TrendingUp } from "lucide-react";
 import { marketData } from "@/lib/providers";
 import { canonicalMarket } from "@/lib/market/repository";
 import { getStoredSecEvidence } from "@/lib/sec/repository";
+import { normalizeStockSymbol } from "@/lib/symbols";
 import type {
   CompanyProfileData,
   DailyBarData,
@@ -28,7 +29,15 @@ interface StockPageProps {
 
 export async function generateMetadata({ params }: StockPageProps): Promise<Metadata> {
   const { symbol } = await params;
-  const ticker = symbol.toUpperCase();
+  let ticker: string;
+  try {
+    ticker = normalizeStockSymbol(symbol);
+  } catch {
+    return {
+      title: "Stock Not Found",
+      description: "The requested stock symbol is not supported by StockPulse.",
+    };
+  }
   return {
     title: `${ticker} Stock Price`,
     description: `Latest price, chart, company details, and stored SEC evidence for ${ticker}`,
@@ -279,7 +288,12 @@ function RelatedStocks({
 
 export default async function StockPage({ params }: StockPageProps) {
   const { symbol: rawSymbol } = await params;
-  const symbol = rawSymbol.toUpperCase();
+  let symbol: string;
+  try {
+    symbol = normalizeStockSymbol(rawSymbol);
+  } catch {
+    notFound();
+  }
 
   const today = new Date();
   const to = today.toISOString().slice(0, 10);

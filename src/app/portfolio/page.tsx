@@ -25,19 +25,29 @@ import {
   Download,
 } from "lucide-react";
 import type { Quote } from "@/lib/providers/types";
+import { calculatePortfolioTotals } from "@/lib/portfolio-math";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { RefreshCountdown } from "@/components/refresh-countdown";
 
 interface HoldingWithQuote extends Holding {
-  currentPrice: number;
+  currentPrice: number | null;
   change: number;
   changePct: number;
 }
 
+function withoutQuote(holding: Holding): HoldingWithQuote {
+  return {
+    ...holding,
+    currentPrice: null,
+    change: 0,
+    changePct: 0,
+  };
+}
+
 export default function PortfolioPage() {
   const { holdings, removeHolding } = usePortfolio();
-  const [enriched, setEnriched] = useState<HoldingWithQuote[]>([]);
+  const [enriched, setEnriched] = useState<HoldingWithQuote[]>(() => holdings.map(withoutQuote));
   const [loading, setLoading] = useState(false);
 
   const fetchPrices = useCallback(async () => {
@@ -45,27 +55,42 @@ export default function PortfolioPage() {
       setEnriched([]);
       return;
     }
+
+    setEnriched((previous) => holdings.map((holding) => {
+      const prior = previous.find((item) => item.id === holding.id);
+      return prior
+        ? {
+            ...holding,
+            currentPrice: prior.currentPrice,
+            change: prior.change,
+            changePct: prior.changePct,
+          }
+        : withoutQuote(holding);
+    }));
+
     setLoading(true);
     try {
-      const symbols = [...new Set(holdings.map((h) => h.symbol))];
+      const symbols = [...new Set(holdings.map((holding) => holding.symbol))];
       const res = await fetch(`/api/quotes?symbols=${symbols.join(",")}`);
       if (res.ok) {
-        const json = await res.json();
+        const json = await res.json() as { data?: Quote[] };
         const quoteMap = new Map<string, Quote>();
-        for (const q of json.data || []) {
-          quoteMap.set(q.symbol, q);
+        for (const quote of json.data || []) {
+          quoteMap.set(quote.symbol, quote);
         }
-        setEnriched(
-          holdings.map((h) => {
-            const q = quoteMap.get(h.symbol);
-            return {
-              ...h,
-              currentPrice: q?.price || 0,
-              change: q?.change || 0,
-              changePct: q?.changePct || 0,
-            };
-          }),
-        );
+        setEnriched((previous) => holdings.map((holding) => {
+          const quote = quoteMap.get(holding.symbol);
+          const prior = previous.find((item) => item.id === holding.id);
+          const freshPrice = quote && Number.isFinite(quote.price) && quote.price > 0
+            ? quote.price
+            : null;
+          return {
+            ...holding,
+            currentPrice: freshPrice ?? prior?.currentPrice ?? null,
+            change: quote?.change ?? prior?.change ?? 0,
+            changePct: quote?.changePct ?? prior?.changePct ?? 0,
+          };
+        }));
       }
     } catch {
       // Keep the last successful portfolio state visible on transient errors.
@@ -78,21 +103,40 @@ export default function PortfolioPage() {
     void fetchPrices();
   }, [fetchPrices]);
 
-  const totalInvested = enriched.reduce((sum, holding) => sum + holding.shares * holding.avgCost, 0);
-  const totalCurrent = enriched.reduce((sum, holding) => sum + holding.shares * holding.currentPrice, 0);
-  const totalPL = totalCurrent - totalInvested;
-  const totalPLPct = totalInvested > 0 ? (totalPL / totalInvested) * 100 : 0;
+  const rows = holdings.map((holding) => {
+    const quote = enriched.find((item) => item.id === holding.id);
+    return quote
+      ? {
+          ...holding,
+          currentPrice: quote.currentPrice,
+          change: quote.change,
+          changePct: quote.changePct,
+        }
+      : withoutQuote(holding);
+  });
+  const totals = calculatePortfolioTotals(rows);
 
   const exportCSV = () => {
     const header = "Symbol,Shares,Avg Cost,Current Price,Market Value,P&L,P&L %";
-    const rows = enriched.map((holding) => {
+    const csvRows = rows.map((holding) => {
+      if (holding.currentPrice === null || holding.currentPrice <= 0) {
+        return [holding.symbol, holding.shares, holding.avgCost.toFixed(2), "", "", "", ""].join(",");
+      }
       const marketValue = holding.shares * holding.currentPrice;
       const costBasis = holding.shares * holding.avgCost;
       const profitLoss = marketValue - costBasis;
       const profitLossPct = costBasis > 0 ? (profitLoss / costBasis) * 100 : 0;
-      return `${holding.symbol},${holding.shares},${holding.avgCost.toFixed(2)},${holding.currentPrice.toFixed(2)},${marketValue.toFixed(2)},${profitLoss.toFixed(2)},${profitLossPct.toFixed(2)}%`;
+      return [
+        holding.symbol,
+        holding.shares,
+        holding.avgCost.toFixed(2),
+        holding.currentPrice.toFixed(2),
+        marketValue.toFixed(2),
+        profitLoss.toFixed(2),
+        `${profitLossPct.toFixed(2)}%`,
+      ].join(",");
     });
-    const csv = [header, ...rows].join("\n");
+    const csv = [header, ...csvRows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -169,15 +213,24 @@ export default function PortfolioPage() {
           </div>
         </section>
 
+        {totals.missingPriceCount > 0 && (
+          <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+            Current prices are unavailable for {totals.missingPriceCount} holding{totals.missingPriceCount === 1 ? "" : "s"}. Quoted value, P&amp;L, return, allocation, and CSV valuation fields exclude those holdings instead of treating them as zero.
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <MetricCard label="Total Value" value={formatPrice(totalCurrent)} />
-          <MetricCard label="Invested" value={formatPrice(totalInvested)} />
           <MetricCard
-            label="Total P&L"
-            value={`${totalPL >= 0 ? "+" : ""}${formatPrice(totalPL)}`}
-            className={totalPL >= 0 ? "text-emerald-500" : "text-red-500"}
+            label={totals.missingPriceCount > 0 ? "Quoted Value" : "Total Value"}
+            value={formatPrice(totals.quotedValue)}
+          />
+          <MetricCard label="Invested" value={formatPrice(totals.invested)} />
+          <MetricCard
+            label={totals.missingPriceCount > 0 ? "Quoted P&L" : "Total P&L"}
+            value={`${totals.quotedProfitLoss >= 0 ? "+" : ""}${formatPrice(totals.quotedProfitLoss)}`}
+            className={totals.quotedProfitLoss >= 0 ? "text-emerald-500" : "text-red-500"}
             icon={
-              totalPL >= 0 ? (
+              totals.quotedProfitLoss >= 0 ? (
                 <TrendingUp className="h-4 w-4 text-emerald-500" />
               ) : (
                 <TrendingDown className="h-4 w-4 text-red-500" />
@@ -185,22 +238,22 @@ export default function PortfolioPage() {
             }
           />
           <MetricCard
-            label="Return"
-            value={`${totalPLPct >= 0 ? "+" : ""}${totalPLPct.toFixed(2)}%`}
-            className={totalPLPct >= 0 ? "text-emerald-500" : "text-red-500"}
+            label={totals.missingPriceCount > 0 ? "Quoted Return" : "Return"}
+            value={`${totals.quotedReturnPct >= 0 ? "+" : ""}${totals.quotedReturnPct.toFixed(2)}%`}
+            className={totals.quotedReturnPct >= 0 ? "text-emerald-500" : "text-red-500"}
           />
         </div>
 
-        {enriched.length > 1 && (
+        {rows.length > 1 && totals.quotedValue > 0 && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Allocation</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex h-4 w-full overflow-hidden rounded-full">
-                {enriched.map((holding, index) => {
-                  const weight = totalCurrent > 0 ? (holding.shares * holding.currentPrice) / totalCurrent : 0;
-                  if (weight === 0) return null;
+                {rows.map((holding, index) => {
+                  if (holding.currentPrice === null || holding.currentPrice <= 0) return null;
+                  const weight = (holding.shares * holding.currentPrice) / totals.quotedValue;
                   return (
                     <div
                       key={holding.id}
@@ -212,9 +265,9 @@ export default function PortfolioPage() {
                 })}
               </div>
               <div className="mt-3 flex flex-wrap gap-3">
-                {enriched.map((holding, index) => {
-                  const weight = totalCurrent > 0 ? (holding.shares * holding.currentPrice) / totalCurrent : 0;
-                  if (weight === 0) return null;
+                {rows.map((holding, index) => {
+                  if (holding.currentPrice === null || holding.currentPrice <= 0) return null;
+                  const weight = (holding.shares * holding.currentPrice) / totals.quotedValue;
                   return (
                     <div key={holding.id} className="flex items-center gap-1.5 text-xs">
                       <div className={cn("h-2.5 w-2.5 rounded-full", ALLOCATION_COLORS[index % ALLOCATION_COLORS.length])} />
@@ -242,11 +295,16 @@ export default function PortfolioPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {enriched.map((holding) => {
-                const marketValue = holding.shares * holding.currentPrice;
+              {rows.map((holding) => {
+                const currentPrice = holding.currentPrice !== null && holding.currentPrice > 0
+                  ? holding.currentPrice
+                  : null;
+                const marketValue = currentPrice === null ? null : holding.shares * currentPrice;
                 const costBasis = holding.shares * holding.avgCost;
-                const profitLoss = marketValue - costBasis;
-                const profitLossPct = costBasis > 0 ? (profitLoss / costBasis) * 100 : 0;
+                const profitLoss = marketValue === null ? null : marketValue - costBasis;
+                const profitLossPct = profitLoss !== null && costBasis > 0
+                  ? (profitLoss / costBasis) * 100
+                  : null;
 
                 return (
                   <TableRow key={holding.id} className="hover:bg-muted/50">
@@ -258,18 +316,18 @@ export default function PortfolioPage() {
                     <TableCell className="text-right font-mono tabular-nums">{holding.shares}</TableCell>
                     <TableCell className="text-right font-mono tabular-nums">{formatPrice(holding.avgCost)}</TableCell>
                     <TableCell className="text-right font-mono tabular-nums">
-                      {holding.currentPrice > 0 ? formatPrice(holding.currentPrice) : "—"}
+                      {currentPrice !== null ? formatPrice(currentPrice) : "—"}
                     </TableCell>
                     <TableCell className="text-right font-mono tabular-nums">
-                      {holding.currentPrice > 0 ? formatPrice(marketValue) : "—"}
+                      {marketValue !== null ? formatPrice(marketValue) : "—"}
                     </TableCell>
                     <TableCell
                       className={cn(
                         "text-right font-mono tabular-nums font-medium",
-                        profitLoss >= 0 ? "text-emerald-500" : "text-red-500",
+                        profitLoss !== null && (profitLoss >= 0 ? "text-emerald-500" : "text-red-500"),
                       )}
                     >
-                      {holding.currentPrice > 0 ? (
+                      {profitLoss !== null && profitLossPct !== null ? (
                         <>
                           {profitLoss >= 0 ? "+" : ""}
                           {formatPrice(profitLoss)}

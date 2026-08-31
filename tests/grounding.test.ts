@@ -77,6 +77,23 @@ const changes: StoredMetricChanges = {
   ],
 };
 
+function validAnalysis(evidenceId: string) {
+  return {
+    format: "stockpulse-grounded-analysis" as const,
+    version: 1 as const,
+    summary: "Revenue was reported for the latest stored quarter.",
+    summaryEvidenceIds: [evidenceId],
+    claims: [
+      {
+        type: "Fact" as const,
+        text: "Stored revenue for the period ending 2026-06-30 is 100 USD.",
+        evidenceIds: [evidenceId],
+      },
+    ],
+    uncertainties: [],
+  };
+}
+
 test("grounding bundle uses stable evidence IDs for facts and derived changes", () => {
   const bundle = buildGroundingBundle(evidence, changes);
   assert.ok(bundle);
@@ -87,37 +104,42 @@ test("grounding bundle uses stable evidence IDs for facts and derived changes", 
   assert.ok(bundle.evidence.some((item) => item.id.startsWith("change:revenue:2026-06-30")));
 });
 
-test("grounded analysis accepts claims that cite known evidence IDs", () => {
+test("grounding bundle is unavailable when there are no evidence items", () => {
+  assert.equal(buildGroundingBundle({ ...evidence, filings: [], metrics: [] }, null), null);
+});
+
+test("grounded analysis accepts summary and claims that cite known evidence IDs", () => {
   const bundle = buildGroundingBundle(evidence, changes);
   assert.ok(bundle);
   const metric = bundle.evidence.find((item) => item.kind === "metric");
   assert.ok(metric);
 
-  const parsed = validateGroundedAnalysis({
-    format: "stockpulse-grounded-analysis",
-    version: 1,
-    summary: "Revenue was reported for the latest stored quarter.",
-    claims: [
-      {
-        type: "Fact",
-        text: "Stored revenue for the period ending 2026-06-30 is 100 USD.",
-        evidenceIds: [metric.id],
-      },
-    ],
-    uncertainties: [],
-  }, bundle);
+  const parsed = validateGroundedAnalysis(validAnalysis(metric.id), bundle);
 
+  assert.equal(parsed.summaryEvidenceIds[0], metric.id);
   assert.equal(parsed.claims[0]?.evidenceIds[0], metric.id);
 });
 
-test("grounded analysis rejects invented evidence IDs", () => {
+test("grounded analysis rejects an invented summary evidence ID", () => {
   const bundle = buildGroundingBundle(evidence, changes);
   assert.ok(bundle);
+  const metric = bundle.evidence.find((item) => item.kind === "metric");
+  assert.ok(metric);
 
   assert.throws(() => validateGroundedAnalysis({
-    format: "stockpulse-grounded-analysis",
-    version: 1,
-    summary: "Unsupported claim.",
+    ...validAnalysis(metric.id),
+    summaryEvidenceIds: ["metric:invented-summary"],
+  }, bundle), /unknown evidence IDs/);
+});
+
+test("grounded analysis rejects invented claim evidence IDs", () => {
+  const bundle = buildGroundingBundle(evidence, changes);
+  assert.ok(bundle);
+  const metric = bundle.evidence.find((item) => item.kind === "metric");
+  assert.ok(metric);
+
+  assert.throws(() => validateGroundedAnalysis({
+    ...validAnalysis(metric.id),
     claims: [
       {
         type: "Fact",
@@ -125,7 +147,6 @@ test("grounded analysis rejects invented evidence IDs", () => {
         evidenceIds: ["metric:invented"],
       },
     ],
-    uncertainties: [],
   }, bundle), /unknown evidence IDs/);
 });
 
@@ -136,17 +157,7 @@ test("grounded analysis schema rejects recommendation-shaped extra fields", () =
   assert.ok(filing);
 
   assert.throws(() => validateGroundedAnalysis({
-    format: "stockpulse-grounded-analysis",
-    version: 1,
-    summary: "Evidence-only summary.",
-    claims: [
-      {
-        type: "Inference",
-        text: "An interpretation based on the filing.",
-        evidenceIds: [filing.id],
-      },
-    ],
-    uncertainties: [],
+    ...validAnalysis(filing.id),
     recommendation: "BUY",
   }, bundle));
 });
@@ -158,16 +169,12 @@ test("grounded analysis rejects recommendation language hidden inside allowed te
   assert.ok(filing);
 
   assert.throws(() => validateGroundedAnalysis({
-    format: "stockpulse-grounded-analysis",
-    version: 1,
+    ...validAnalysis(filing.id),
     summary: "This evidence means investors should buy the stock.",
-    claims: [
-      {
-        type: "Inference",
-        text: "Revenue increased in the stored comparison.",
-        evidenceIds: [filing.id],
-      },
-    ],
-    uncertainties: [],
+  }, bundle), /recommendation language/);
+
+  assert.throws(() => validateGroundedAnalysis({
+    ...validAnalysis(filing.id),
+    summary: "The evidence supports an overweight position.",
   }, bundle), /recommendation language/);
 });

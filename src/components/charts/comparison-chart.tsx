@@ -8,16 +8,16 @@ import {
   LineSeries,
 } from "lightweight-charts";
 import { useTheme } from "@/components/theme-provider";
+import {
+  buildComparisonLineData,
+  findCommonComparisonStart,
+  type ComparisonSeriesInput,
+} from "@/lib/comparison-series";
 
 const LINE_COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444"];
 
-interface ComparisonData {
-  symbol: string;
-  bars: Array<{ date: string; close: number }>;
-}
-
 interface ComparisonChartProps {
-  data: ComparisonData[];
+  data: ComparisonSeriesInput[];
   height?: number;
   mode: "price" | "percent";
 }
@@ -67,8 +67,12 @@ export function ComparisonChart({
     });
 
     chartRef.current = chart;
+    const commonStartDate = mode === "percent" ? findCommonComparisonStart(data) : null;
 
     data.forEach((series, i) => {
+      const lineData = buildComparisonLineData(series, mode, commonStartDate);
+      if (lineData.length === 0) return;
+
       const color = LINE_COLORS[i % LINE_COLORS.length];
       const lineSeries = chart.addSeries(LineSeries, {
         color,
@@ -76,19 +80,9 @@ export function ComparisonChart({
         title: series.symbol,
         priceFormat:
           mode === "percent"
-            ? { type: "custom", formatter: (v: number) => `${v.toFixed(2)}%` }
+            ? { type: "custom", formatter: (value: number) => `${value.toFixed(2)}%` }
             : { type: "price", precision: 2, minMove: 0.01 },
       });
-
-      const basePrice = series.bars[0]?.close || 1;
-
-      const lineData = series.bars.map((b) => ({
-        time: b.date as string,
-        value:
-          mode === "percent"
-            ? ((b.close - basePrice) / basePrice) * 100
-            : b.close,
-      }));
 
       lineSeries.setData(lineData);
     });

@@ -25,14 +25,28 @@ function getApiKey(): string {
   return key;
 }
 
-async function fetchFinnhub(endpoint: string, params: Record<string, string> = {}): Promise<unknown> {
+export function buildFinnhubRequest(
+  endpoint: string,
+  params: Record<string, string>,
+  apiKey: string,
+): { url: string; headers: Record<string, string> } {
   const url = new URL(`${BASE_URL}${endpoint}`);
-  url.searchParams.set("token", getApiKey());
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
+  return {
+    url: url.toString(),
+    headers: {
+      Accept: "application/json",
+      "X-Finnhub-Token": apiKey,
+    },
+  };
+}
 
-  const res = await fetch(url.toString(), {
+async function fetchFinnhub(endpoint: string, params: Record<string, string> = {}): Promise<unknown> {
+  const request = buildFinnhubRequest(endpoint, params, getApiKey());
+  const res = await fetch(request.url, {
+    headers: request.headers,
     signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) {
