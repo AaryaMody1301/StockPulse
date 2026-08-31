@@ -66,7 +66,7 @@ export function AiAnalysisPanel({
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground">
             {mode === "challenge"
               ? "Running this sends the current thesis draft plus the bounded grounding packet to the server-configured AI endpoint. It never stores an API key in the browser."
-              : "Optional model synthesis over the bounded grounding packet. Every returned claim must cite a known evidence ID and pass StockPulse validation."}
+              : "Optional model synthesis over the bounded grounding packet. The summary and every returned claim must cite known evidence IDs and pass StockPulse validation."}
           </p>
         </div>
         <Button
@@ -96,6 +96,9 @@ export function AiAnalysisPanel({
               {model && <span className="font-mono text-[10px] text-muted-foreground">{model}</span>}
             </div>
             <p className="text-sm leading-relaxed">{analysis.summary}</p>
+            <p className="mt-2 break-all font-mono text-[10px] text-muted-foreground">
+              {analysis.summaryEvidenceIds.join(" · ")}
+            </p>
           </div>
 
           <div className="space-y-2">
