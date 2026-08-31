@@ -4,7 +4,7 @@ import { useState } from "react";
 import { PriceChart } from "@/components/charts/price-chart";
 import { cn } from "@/lib/utils";
 
-type TimeRange = "1W" | "1M" | "3M" | "6M" | "1Y";
+export type TimeRange = "1W" | "1M" | "3M" | "6M" | "1Y";
 
 const RANGES: { label: TimeRange; days: number }[] = [
   { label: "1W", days: 7 },
@@ -14,7 +14,7 @@ const RANGES: { label: TimeRange; days: number }[] = [
   { label: "1Y", days: 365 },
 ];
 
-interface Bar {
+export interface RangeBar {
   date: string;
   open: number;
   high: number;
@@ -25,31 +25,34 @@ interface Bar {
 
 interface ChartWithRangeProps {
   symbol: string;
-  initialData: Bar[];
+  initialData: RangeBar[];
 }
 
-function filterByRange(bars: Bar[], range: TimeRange): Bar[] {
+export function filterBarsByRange(
+  bars: RangeBar[],
+  range: TimeRange,
+  now = new Date(),
+): RangeBar[] {
   if (range === "1Y") return bars;
-  const rangeDays = RANGES.find((x) => x.label === range)!.days;
-  const cutoff = new Date(Date.now() - rangeDays * 24 * 60 * 60 * 1000)
+  const rangeDays = RANGES.find((item) => item.label === range)?.days;
+  if (!rangeDays) return [];
+  const cutoff = new Date(now.getTime() - rangeDays * 24 * 60 * 60 * 1000)
     .toISOString()
     .slice(0, 10);
-  const filtered = bars.filter((b) => b.date >= cutoff);
-  return filtered.length > 0 ? filtered : bars;
+  return bars.filter((bar) => bar.date >= cutoff);
 }
 
 export function ChartWithRange({ initialData }: ChartWithRangeProps) {
   const [range, setRange] = useState<TimeRange>("1Y");
-  const [data, setData] = useState<Bar[]>(initialData);
+  const [data, setData] = useState<RangeBar[]>(initialData);
 
   function handleRangeChange(newRange: TimeRange) {
     setRange(newRange);
-    setData(filterByRange(initialData, newRange));
+    setData(filterBarsByRange(initialData, newRange));
   }
 
   return (
     <div className="space-y-3">
-      {/* Range selector */}
       <div className="flex gap-1">
         {RANGES.map(({ label }) => (
           <button
@@ -67,7 +70,6 @@ export function ChartWithRange({ initialData }: ChartWithRangeProps) {
         ))}
       </div>
 
-      {/* Chart */}
       {data.length > 0 ? (
         <PriceChart data={data} />
       ) : (
