@@ -13,6 +13,16 @@ function hasValue(value: string | undefined): boolean {
   return Boolean(value?.trim());
 }
 
+function hasRealSecContact(userAgent: string): boolean {
+  const email = userAgent.match(/\b[A-Z0-9._%+-]+@([A-Z0-9.-]+\.[A-Z]{2,})\b/i);
+  if (!email?.[1]) return false;
+
+  const domain = email[1].toLowerCase();
+  if (["example.com", "example.net", "example.org"].includes(domain)) return false;
+  if (domain === "example" || domain.endsWith(".example")) return false;
+  return true;
+}
+
 export function getRuntimeConfigurationStatus(
   env: EnvLike = process.env,
 ): RuntimeConfigurationStatus {
@@ -21,11 +31,7 @@ export function getRuntimeConfigurationStatus(
   if (hasValue(env.TWELVEDATA_API_KEY)) marketProviders.push("twelvedata");
 
   const secUserAgent = env.SEC_USER_AGENT?.trim() ?? "";
-  const secIngestionConfigured = Boolean(
-    secUserAgent
-    && /\S+@\S+\.\S+/.test(secUserAgent)
-    && !/@[^\s@]+\.example\b/i.test(secUserAgent),
-  );
+  const secIngestionConfigured = hasRealSecContact(secUserAgent);
 
   const aiKeyConfigured = hasValue(env.AI_GATEWAY_API_KEY) || hasValue(env.AI_API_KEY);
 
