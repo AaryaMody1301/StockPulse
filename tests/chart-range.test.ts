@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { filterBarsByRange, type RangeBar } from "../src/components/charts/chart-with-range";
+import { filterBarsByRange, type RangeBar } from "../src/lib/chart-range";
 
 const bars: RangeBar[] = [
   { date: "2026-08-01", open: 100, high: 101, low: 99, close: 100 },
