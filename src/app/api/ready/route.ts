@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
-import {
-  getRuntimeConfigurationStatus,
-  isDatabaseReachable,
-} from "@/lib/runtime-readiness";
+import { getRuntimeConfigurationStatus } from "@/lib/runtime-config";
+import { isDatabaseReachable } from "@/lib/runtime-readiness";
 
 export const dynamic = "force-dynamic";
 
