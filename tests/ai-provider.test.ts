@@ -3,6 +3,7 @@ import test from "node:test";
 import type { GroundingBundle } from "../src/lib/ai/grounding";
 import { parseGroundedModelContent } from "../src/lib/ai/provider";
 
+const evidenceId = "metric:revenue:2026-06-30:test";
 const bundle: GroundingBundle = {
   format: "stockpulse-grounding",
   version: 1,
@@ -11,7 +12,7 @@ const bundle: GroundingBundle = {
   generatedAt: "2026-08-30T00:00:00.000Z",
   instructions: ["Use only known evidence IDs."],
   evidence: [{
-    id: "metric:revenue:2026-06-30:test",
+    id: evidenceId,
     kind: "metric",
     label: "Revenue",
     sourceUrl: "https://www.sec.gov/example",
@@ -25,24 +26,27 @@ test("AI provider content must be strict JSON and cite the grounding bundle", ()
     format: "stockpulse-grounded-analysis",
     version: 1,
     summary: "The stored revenue fact is available.",
+    summaryEvidenceIds: [evidenceId],
     claims: [{
       type: "Fact",
       text: "Stored revenue is 100 USD.",
-      evidenceIds: ["metric:revenue:2026-06-30:test"],
+      evidenceIds: [evidenceId],
     }],
     uncertainties: [],
   }), bundle);
   assert.equal(parsed.claims.length, 1);
+  assert.equal(parsed.summaryEvidenceIds[0], evidenceId);
 
   assert.throws(() => parseGroundedModelContent("```json\n{}\n```", bundle), /non-JSON/);
   assert.throws(() => parseGroundedModelContent(JSON.stringify({
     format: "stockpulse-grounded-analysis",
     version: 1,
     summary: "Unsupported.",
+    summaryEvidenceIds: ["invented"],
     claims: [{
       type: "Fact",
-      text: "Invented fact.",
-      evidenceIds: ["invented"],
+      text: "Stored revenue is 100 USD.",
+      evidenceIds: [evidenceId],
     }],
     uncertainties: [],
   }), bundle), /unknown evidence IDs/);
