@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getStoredMetricChanges } from "@/lib/change-intelligence/repository";
 import { normalizeStockSymbol } from "@/lib/symbols";
@@ -14,7 +15,7 @@ export default async function StockChangesPage({ params }: ChangePageProps) {
   try {
     symbol = normalizeStockSymbol(rawSymbol);
   } catch {
-    symbol = rawSymbol.toUpperCase();
+    notFound();
   }
 
   let changes = null;
@@ -39,7 +40,7 @@ export default async function StockChangesPage({ params }: ChangePageProps) {
           <p className="text-sm font-medium text-primary">Change intelligence</p>
           <h1 className="mt-1 text-3xl font-bold">{symbol}: reported metric changes</h1>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
-            This view compares stored normalized SEC metrics across distinct reporting periods. It shows source facts and deterministic calculations only; it does not infer whether a change is good, bad, or an investment recommendation.
+            This view compares stored normalized SEC metrics only when their reporting contexts are comparable. It shows source facts and deterministic calculations only; it does not infer whether a change is good, bad, or an investment recommendation.
           </p>
         </div>
 
