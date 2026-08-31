@@ -1,8 +1,8 @@
 import { db } from "@/lib/db";
 import {
-  latestCompletedUsMarketSessionDate,
-  nearestUsMarketTradingDate,
-} from "@/lib/market-calendar";
+  DEFAULT_DAILY_START_TOLERANCE_DAYS,
+  hasDailyCoverage,
+} from "@/lib/market/coverage";
 import { marketData } from "@/lib/providers";
 import type { CompanyProfileData, DailyBarData, Quote } from "@/lib/providers/types";
 import { normalizeStockSymbol, normalizeStockSymbols } from "@/lib/symbols";
@@ -10,7 +10,7 @@ import { normalizeStockSymbol, normalizeStockSymbols } from "@/lib/symbols";
 export const MARKET_FRESHNESS = {
   quoteMs: 45_000,
   profileMs: 7 * 24 * 60 * 60 * 1000,
-  dailyStartToleranceDays: 7,
+  dailyStartToleranceDays: DEFAULT_DAILY_START_TOLERANCE_DAYS,
 } as const;
 
 function databaseConfigured(): boolean {
@@ -21,12 +21,6 @@ function toDateOnly(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
-function addCalendarDays(value: string, days: number): string {
-  const date = toDateOnly(value);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
 export function isStoredQuoteFresh(
   timestamp: Date,
   nowMs = Date.now(),
@@ -34,31 +28,6 @@ export function isStoredQuoteFresh(
 ): boolean {
   const age = nowMs - timestamp.getTime();
   return age >= 0 && age <= maxAgeMs;
-}
-
-export function hasDailyCoverage(
-  dates: string[],
-  from: string,
-  to: string,
-  now = new Date(),
-  startToleranceDays = MARKET_FRESHNESS.dailyStartToleranceDays,
-): boolean {
-  if (dates.length === 0 || to < from) return false;
-
-  const latestCompletedSession = latestCompletedUsMarketSessionDate(now);
-  if (!latestCompletedSession) return false;
-
-  const expectedEnd = to < latestCompletedSession
-    ? nearestUsMarketTradingDate(to, -1)
-    : latestCompletedSession;
-  if (!expectedEnd) return false;
-
-  const sorted = [...dates].sort();
-  const first = sorted[0];
-  const last = sorted[sorted.length - 1];
-  const startBoundary = addCalendarDays(from, Math.max(0, startToleranceDays));
-
-  return first <= startBoundary && last >= expectedEnd;
 }
 
 function snapshotToQuote(row: {
