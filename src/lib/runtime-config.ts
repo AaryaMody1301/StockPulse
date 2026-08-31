@@ -23,8 +23,8 @@ export function getRuntimeConfigurationStatus(
   const secUserAgent = env.SEC_USER_AGENT?.trim() ?? "";
   const secIngestionConfigured = Boolean(
     secUserAgent
-    && !/contact@example\.com/i.test(secUserAgent)
-    && /\S+@\S+\.\S+/.test(secUserAgent),
+    && /\S+@\S+\.\S+/.test(secUserAgent)
+    && !/@[^\s@]+\.example\b/i.test(secUserAgent),
   );
 
   const aiKeyConfigured = hasValue(env.AI_GATEWAY_API_KEY) || hasValue(env.AI_API_KEY);
