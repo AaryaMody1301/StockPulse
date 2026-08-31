@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { ComparisonChart } from "@/components/charts/comparison-chart";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart3, Plus, X, Search, Loader2 } from "lucide-react";
+import { normalizeStockSymbol } from "@/lib/symbols";
+import { toast } from "sonner";
 
 interface ComparisonData {
   symbol: string;
@@ -24,36 +26,49 @@ export default function ComparePage() {
   const [fetched, setFetched] = useState(false);
 
   const addSymbol = useCallback(
-    (sym: string) => {
-      const upper = sym.trim().toUpperCase();
-      if (upper && !symbols.includes(upper) && symbols.length < 4) {
-        setSymbols((prev) => [...prev, upper]);
+    (value: string) => {
+      let symbol: string;
+      try {
+        symbol = normalizeStockSymbol(value);
+      } catch {
+        toast.error("Enter a valid ticker symbol");
+        return;
+      }
+
+      if (!symbols.includes(symbol) && symbols.length < 4) {
+        setSymbols((previous) => [...previous, symbol]);
         setFetched(false);
+        setData([]);
       }
       setInput("");
     },
     [symbols],
   );
 
-  const removeSymbol = useCallback((sym: string) => {
-    setSymbols((prev) => prev.filter((s) => s !== sym));
+  const removeSymbol = useCallback((symbol: string) => {
+    setSymbols((previous) => previous.filter((item) => item !== symbol));
     setFetched(false);
+    setData([]);
   }, []);
 
   const fetchComparison = useCallback(async () => {
     if (symbols.length < 2) return;
     setLoading(true);
     try {
-      const res = await fetch(
-        `/api/compare?symbols=${symbols.join(",")}`,
-      );
-      if (res.ok) {
-        const json = await res.json();
-        setData(json.data || []);
+      const res = await fetch(`/api/compare?symbols=${symbols.join(",")}`);
+      if (!res.ok) {
+        setData([]);
         setFetched(true);
+        toast.error("Comparison data is unavailable for the selected symbols");
+        return;
       }
+      const json = await res.json() as { data?: ComparisonData[] };
+      setData(json.data || []);
+      setFetched(true);
     } catch {
-      // ignore
+      setData([]);
+      setFetched(true);
+      toast.error("Comparison data is unavailable right now");
     } finally {
       setLoading(false);
     }
@@ -68,17 +83,12 @@ export default function ComparePage() {
               <BarChart3 className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold tracking-tight">
-                Stock Comparison
-              </h1>
-              <p className="text-muted-foreground">
-                Compare up to 4 stocks side by side
-              </p>
+              <h1 className="text-3xl font-bold tracking-tight">Stock Comparison</h1>
+              <p className="text-muted-foreground">Compare up to 4 stocks side by side</p>
             </div>
           </div>
         </section>
 
-        {/* Symbol Selection */}
         <Card className="overflow-hidden border-border/60 transition-all duration-300 hover:shadow-lg hover:border-primary/20">
           <CardHeader className="border-b bg-muted/20 pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
@@ -92,9 +102,9 @@ export default function ComparePage() {
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") addSymbol(input);
+                  onChange={(event) => setInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") addSymbol(input);
                   }}
                   placeholder="Add ticker symbol (e.g. AAPL)"
                   className="pl-9"
@@ -112,18 +122,17 @@ export default function ComparePage() {
               </Button>
             </div>
 
-            {/* Selected symbols */}
             <div className="flex flex-wrap gap-2">
-              {symbols.map((sym) => (
-                <Badge key={sym} variant="secondary" className="gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5 font-semibold transition-colors hover:bg-primary/10">
+              {symbols.map((symbol) => (
+                <Badge key={symbol} variant="secondary" className="gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5 font-semibold transition-colors hover:bg-primary/10">
                   <span className="flex h-5 w-5 items-center justify-center rounded bg-primary/10 text-[10px] font-bold text-primary">
-                    {sym.slice(0, 2)}
+                    {symbol.slice(0, 2)}
                   </span>
-                  {sym}
+                  {symbol}
                   <button
-                    onClick={() => removeSymbol(sym)}
+                    onClick={() => removeSymbol(symbol)}
                     className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-destructive/10"
-                    aria-label={`Remove ${sym}`}
+                    aria-label={`Remove ${symbol}`}
                   >
                     <X className="h-3 w-3 hover:text-destructive" />
                   </button>
@@ -131,16 +140,15 @@ export default function ComparePage() {
               ))}
             </div>
 
-            {/* Quick-add suggestions */}
             <div className="flex flex-wrap gap-1.5">
-              {SUGGESTED.filter((s) => !symbols.includes(s)).map((s) => (
+              {SUGGESTED.filter((symbol) => !symbols.includes(symbol)).map((symbol) => (
                 <button
-                  key={s}
-                  onClick={() => addSymbol(s)}
+                  key={symbol}
+                  onClick={() => addSymbol(symbol)}
                   className="rounded-lg border border-dashed border-border/80 px-2.5 py-1 text-xs font-medium text-muted-foreground transition-all hover:border-primary/40 hover:bg-primary/5 hover:text-foreground hover:shadow-sm"
                   disabled={symbols.length >= 4}
                 >
-                  + {s}
+                  + {symbol}
                 </button>
               ))}
             </div>
@@ -160,7 +168,6 @@ export default function ComparePage() {
           </CardContent>
         </Card>
 
-        {/* Chart */}
         {fetched && data.length >= 2 && (
           <Card className="overflow-hidden border-border/60 transition-all duration-300 hover:shadow-lg hover:border-primary/20">
             <CardHeader className="border-b bg-muted/20 pb-3">
@@ -190,8 +197,7 @@ export default function ComparePage() {
 
         {fetched && data.length < 2 && (
           <div className="rounded-2xl border border-dashed border-border/60 bg-muted/10 py-12 text-center text-muted-foreground">
-            Could not load enough data to compare. Check the ticker symbols and
-            try again.
+            Could not load enough data to compare. Check the ticker symbols and try again.
           </div>
         )}
       </div>
