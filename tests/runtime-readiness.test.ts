@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getRuntimeConfigurationStatus } from "../src/lib/runtime-readiness";
+import { getRuntimeConfigurationStatus } from "../src/lib/runtime-config";
 
 test("runtime readiness reports missing core configuration without exposing values", () => {
   const status = getRuntimeConfigurationStatus({});
