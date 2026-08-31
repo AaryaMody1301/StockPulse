@@ -1,4 +1,8 @@
 import { db } from "@/lib/db";
+import {
+  latestCompletedUsMarketSessionDate,
+  nearestUsMarketTradingDate,
+} from "@/lib/market-calendar";
 import { marketData } from "@/lib/providers";
 import type { CompanyProfileData, DailyBarData, Quote } from "@/lib/providers/types";
 import { normalizeStockSymbol, normalizeStockSymbols } from "@/lib/symbols";
@@ -6,7 +10,7 @@ import { normalizeStockSymbol, normalizeStockSymbols } from "@/lib/symbols";
 export const MARKET_FRESHNESS = {
   quoteMs: 45_000,
   profileMs: 7 * 24 * 60 * 60 * 1000,
-  dailyCoverageToleranceDays: 7,
+  dailyStartToleranceDays: 7,
 } as const;
 
 function databaseConfigured(): boolean {
@@ -15,6 +19,12 @@ function databaseConfigured(): boolean {
 
 function toDateOnly(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`);
+}
+
+function addCalendarDays(value: string, days: number): string {
+  const date = toDateOnly(value);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 export function isStoredQuoteFresh(
@@ -30,20 +40,25 @@ export function hasDailyCoverage(
   dates: string[],
   from: string,
   to: string,
-  toleranceDays = MARKET_FRESHNESS.dailyCoverageToleranceDays,
+  now = new Date(),
+  startToleranceDays = MARKET_FRESHNESS.dailyStartToleranceDays,
 ): boolean {
-  if (dates.length === 0) return false;
+  if (dates.length === 0 || to < from) return false;
+
+  const latestCompletedSession = latestCompletedUsMarketSessionDate(now);
+  if (!latestCompletedSession) return false;
+
+  const expectedEnd = to < latestCompletedSession
+    ? nearestUsMarketTradingDate(to, -1)
+    : latestCompletedSession;
+  if (!expectedEnd) return false;
+
   const sorted = [...dates].sort();
-  const dayMs = 24 * 60 * 60 * 1000;
-  const toleranceMs = toleranceDays * dayMs;
-  const first = toDateOnly(sorted[0]).getTime();
-  const last = toDateOnly(sorted[sorted.length - 1]).getTime();
-  const fromMs = toDateOnly(from).getTime();
-  const requestedToMs = toDateOnly(to).getTime();
-  const today = new Date();
-  const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
-  const effectiveToMs = Math.min(requestedToMs, todayUtc);
-  return first <= fromMs + toleranceMs && last >= effectiveToMs - toleranceMs;
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+  const startBoundary = addCalendarDays(from, Math.max(0, startToleranceDays));
+
+  return first <= startBoundary && last >= expectedEnd;
 }
 
 function snapshotToQuote(row: {
