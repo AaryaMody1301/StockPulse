@@ -1,12 +1,22 @@
 import { db } from "@/lib/db";
 import { normalizeStockSymbol } from "@/lib/symbols";
-import { getSecCompanyFacts, getSecSubmissions, getSecTickerMap } from "./client";
+import {
+  getSecCompanyFacts,
+  getSecSubmissionHistory,
+  getSecSubmissions,
+  getSecTickerMap,
+} from "./client";
 import {
   normalizeCompanyFacts,
+  normalizeSubmissionHistory,
   normalizeSubmissions,
   resolveTickerIdentity,
+  type NormalizedSecFiling,
   type SecIdentity,
 } from "./normalization";
+
+const MIN_RECENT_RESEARCH_FILINGS = 20;
+const MAX_HISTORY_FILES_PER_INGESTION = 2;
 
 function requireDatabase(): void {
   if (!process.env.DATABASE_URL?.trim()) {
@@ -16,6 +26,18 @@ function requireDatabase(): void {
 
 function toDate(value: string | null): Date | null {
   return value ? new Date(`${value}T00:00:00.000Z`) : null;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function dedupeFilings(filings: NormalizedSecFiling[]): NormalizedSecFiling[] {
+  const byAccession = new Map<string, NormalizedSecFiling>();
+  for (const filing of filings) {
+    if (!byAccession.has(filing.accessionNumber)) byAccession.set(filing.accessionNumber, filing);
+  }
+  return [...byAccession.values()].sort((a, b) => b.filedAt.localeCompare(a.filedAt));
 }
 
 async function persistIdentity(identity: SecIdentity) {
@@ -85,26 +107,45 @@ export async function ingestSecEvidence(rawSymbol: string): Promise<SecIngestion
     ]);
 
     const errors: string[] = [];
-    const filings = submissionsResult.status === "fulfilled"
-      ? normalizeSubmissions(submissionsResult.value)
-      : [];
-    if (submissionsResult.status === "rejected") {
-      errors.push(submissionsResult.reason instanceof Error ? submissionsResult.reason.message : String(submissionsResult.reason));
+    let filings: NormalizedSecFiling[] = [];
+    if (submissionsResult.status === "fulfilled") {
+      filings = normalizeSubmissions(submissionsResult.value);
+
+      if (
+        filings.length < MIN_RECENT_RESEARCH_FILINGS &&
+        submissionsResult.value.filings.files.length > 0
+      ) {
+        const historyFiles = submissionsResult.value.filings.files.slice(0, MAX_HISTORY_FILES_PER_INGESTION);
+        const historyResults = await Promise.allSettled(
+          historyFiles.map((file) => getSecSubmissionHistory(file.name)),
+        );
+        historyResults.forEach((result, index) => {
+          if (result.status === "fulfilled") {
+            filings.push(...normalizeSubmissionHistory(identity.cik, result.value));
+          } else {
+            errors.push(`SEC history ${historyFiles[index]?.name ?? index}: ${errorMessage(result.reason)}`);
+          }
+        });
+      }
+      filings = dedupeFilings(filings);
+    } else {
+      errors.push(errorMessage(submissionsResult.reason));
     }
 
     const normalizedFacts = companyFactsResult.status === "fulfilled"
       ? normalizeCompanyFacts(companyFactsResult.value)
       : { facts: [], metrics: [] };
     if (companyFactsResult.status === "rejected") {
-      errors.push(companyFactsResult.reason instanceof Error ? companyFactsResult.reason.message : String(companyFactsResult.reason));
+      errors.push(errorMessage(companyFactsResult.reason));
     }
 
     if (submissionsResult.status === "rejected" && companyFactsResult.status === "rejected") {
       throw new Error(errors.join("; ") || "SEC submissions and companyfacts requests both failed");
     }
 
+    let filingsStored = 0;
     if (filings.length > 0) {
-      await db.secFiling.createMany({
+      const result = await db.secFiling.createMany({
         data: filings.map((filing) => ({
           symbolId: symbolRow.id,
           cik: filing.cik,
@@ -118,10 +159,12 @@ export async function ingestSecEvidence(rawSymbol: string): Promise<SecIngestion
         })),
         skipDuplicates: true,
       });
+      filingsStored = result.count;
     }
 
+    let factsStored = 0;
     if (normalizedFacts.facts.length > 0) {
-      await db.secFact.createMany({
+      const result = await db.secFact.createMany({
         data: normalizedFacts.facts.map((fact) => ({
           factKey: fact.factKey,
           symbolId: symbolRow.id,
@@ -143,10 +186,12 @@ export async function ingestSecEvidence(rawSymbol: string): Promise<SecIngestion
         })),
         skipDuplicates: true,
       });
+      factsStored = result.count;
     }
 
+    let metricsStored = 0;
     if (normalizedFacts.metrics.length > 0) {
-      await db.secMetric.createMany({
+      const result = await db.secMetric.createMany({
         data: normalizedFacts.metrics.map((metric) => ({
           metricKey: metric.metricKey,
           symbolId: symbolRow.id,
@@ -166,6 +211,7 @@ export async function ingestSecEvidence(rawSymbol: string): Promise<SecIngestion
         })),
         skipDuplicates: true,
       });
+      metricsStored = result.count;
     }
 
     const status = errors.length === 0 ? "success" : "partial";
@@ -173,9 +219,9 @@ export async function ingestSecEvidence(rawSymbol: string): Promise<SecIngestion
       symbol,
       cik: identity.cik,
       status,
-      filingsStored: filings.length,
-      factsStored: normalizedFacts.facts.length,
-      metricsStored: normalizedFacts.metrics.length,
+      filingsStored,
+      factsStored,
+      metricsStored,
       errors,
     };
 
@@ -199,7 +245,7 @@ export async function ingestSecEvidence(rawSymbol: string): Promise<SecIngestion
 
     return summary;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = errorMessage(error);
     await db.jobRun.update({
       where: { id: job.id },
       data: {

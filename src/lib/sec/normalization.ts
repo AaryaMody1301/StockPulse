@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import type {
   SecCompanyFactsPayload,
   SecFactUnitPayload,
+  SecFilingColumnsPayload,
+  SecSubmissionHistoryPayload,
   SecSubmissionsPayload,
   SecTickerMapPayload,
 } from "./validation";
@@ -186,6 +188,16 @@ function stableKey(parts: Array<string | number | null | undefined>): string {
     .digest("hex");
 }
 
+function encodeSecDocumentPath(primaryDocument: string | null): string | null {
+  const document = primaryDocument?.trim().replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!document) return null;
+  const segments = document.split("/").filter(Boolean);
+  if (segments.length === 0 || segments.some((segment) => segment === "." || segment === "..")) {
+    return null;
+  }
+  return segments.map((segment) => encodeURIComponent(segment)).join("/");
+}
+
 export function buildSecFilingUrl(
   cik: string,
   accessionNumber: string,
@@ -193,48 +205,61 @@ export function buildSecFilingUrl(
 ): string {
   const numericCik = String(Number.parseInt(normalizeCik(cik), 10));
   const accession = accessionNumber.replace(/-/g, "");
-  const document = primaryDocument?.replace(/^\/+/, "").trim();
+  const document = encodeSecDocumentPath(primaryDocument);
   const base = `https://www.sec.gov/Archives/edgar/data/${numericCik}/${accession}`;
-  return document ? `${base}/${encodeURIComponent(document)}` : `${base}/`;
+  return document ? `${base}/${document}` : `${base}/`;
 }
 
-export function normalizeSubmissions(
-  payload: SecSubmissionsPayload,
+export function normalizeFilingColumns(
+  cikInput: string | number,
+  columns: SecFilingColumnsPayload,
 ): NormalizedSecFiling[] {
-  const recent = payload.filings.recent;
-  const expected = recent.accessionNumber.length;
+  const expected = columns.accessionNumber.length;
   const parallel = [
-    recent.filingDate,
-    recent.reportDate,
-    recent.acceptanceDateTime,
-    recent.form,
-    recent.primaryDocument,
+    columns.filingDate,
+    columns.reportDate,
+    columns.acceptanceDateTime,
+    columns.form,
+    columns.primaryDocument,
   ];
   if (parallel.some((values) => values.length !== expected)) {
-    throw new Error("SEC submissions recent filing arrays have mismatched lengths");
+    throw new Error("SEC submissions filing arrays have mismatched lengths");
   }
 
-  const cik = normalizeCik(payload.cik);
+  const cik = normalizeCik(cikInput);
   const filings: NormalizedSecFiling[] = [];
   for (let index = 0; index < expected; index += 1) {
-    const accessionNumber = recent.accessionNumber[index]?.trim();
-    const form = recent.form[index]?.trim().toUpperCase();
-    const filedAt = cleanDate(recent.filingDate[index]);
+    const accessionNumber = columns.accessionNumber[index]?.trim();
+    const form = columns.form[index]?.trim().toUpperCase();
+    const filedAt = cleanDate(columns.filingDate[index]);
     if (!accessionNumber || !form || !filedAt || !SUPPORTED_FORMS.has(form)) continue;
 
-    const primaryDocument = recent.primaryDocument[index]?.trim() || null;
+    const primaryDocument = columns.primaryDocument[index]?.trim() || null;
     filings.push({
       cik,
       accessionNumber,
       form,
       filedAt,
-      reportDate: cleanDate(recent.reportDate[index]),
-      acceptedAt: cleanDateTime(recent.acceptanceDateTime[index]),
+      reportDate: cleanDate(columns.reportDate[index]),
+      acceptedAt: cleanDateTime(columns.acceptanceDateTime[index]),
       primaryDocument,
       sourceUrl: buildSecFilingUrl(cik, accessionNumber, primaryDocument),
     });
   }
   return filings;
+}
+
+export function normalizeSubmissions(
+  payload: SecSubmissionsPayload,
+): NormalizedSecFiling[] {
+  return normalizeFilingColumns(payload.cik, payload.filings.recent);
+}
+
+export function normalizeSubmissionHistory(
+  cik: string | number,
+  payload: SecSubmissionHistoryPayload,
+): NormalizedSecFiling[] {
+  return normalizeFilingColumns(cik, payload);
 }
 
 function normalizeFactValue(value: SecFactUnitPayload["val"]): string | null {

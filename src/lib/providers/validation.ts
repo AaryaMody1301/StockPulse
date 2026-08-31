@@ -3,6 +3,23 @@ import { z } from "zod";
 const finiteNumber = z.number().finite();
 const numericValue = z.union([z.string(), z.number()]);
 
+function isHttpUrl(value: string): boolean {
+  try {
+    const protocol = new URL(value).protocol;
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export const httpUrlSchema = z
+  .string()
+  .trim()
+  .url()
+  .refine(isHttpUrl, { message: "Expected an HTTP(S) URL" });
+
+const optionalHttpUrlSchema = z.union([z.literal(""), httpUrlSchema]);
+
 export const finnhubQuoteSchema = z.object({
   c: finiteNumber,
   d: finiteNumber,
@@ -29,10 +46,10 @@ export const finnhubSearchSchema = z.object({
 export const finnhubProfileSchema = z.object({
   ticker: z.string(),
   name: z.string(),
-  logo: z.string().default(""),
+  logo: optionalHttpUrlSchema.default(""),
   finnhubIndustry: z.string().default(""),
   marketCapitalization: finiteNumber.default(0),
-  weburl: z.string().default(""),
+  weburl: optionalHttpUrlSchema.default(""),
   country: z.string().default(""),
   currency: z.string().default(""),
 });
@@ -63,8 +80,8 @@ export const finnhubNewsSchema = z.array(
     headline: z.string(),
     summary: z.string().default(""),
     source: z.string(),
-    url: z.string(),
-    image: z.string().default(""),
+    url: httpUrlSchema,
+    image: optionalHttpUrlSchema.default(""),
     category: z.string().default("general"),
     datetime: finiteNumber,
   }),

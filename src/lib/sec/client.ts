@@ -1,9 +1,12 @@
+import type { ZodType } from "zod";
 import {
   parseSecPayload,
   secCompanyFactsSchema,
+  secSubmissionHistorySchema,
   secSubmissionsSchema,
   secTickerMapSchema,
   type SecCompanyFactsPayload,
+  type SecSubmissionHistoryPayload,
   type SecSubmissionsPayload,
   type SecTickerMapPayload,
 } from "./validation";
@@ -14,10 +17,23 @@ const SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json";
 const MIN_REQUEST_INTERVAL_MS = 150;
 const REQUEST_TIMEOUT_MS = 10_000;
 const TICKER_CACHE_MS = 6 * 60 * 60 * 1000;
+const MAX_ATTEMPTS = 3;
+const MAX_RETRY_AFTER_MS = 30_000;
 
 let requestQueue: Promise<void> = Promise.resolve();
 let nextRequestAt = 0;
 let tickerCache: { expiresAt: number; payload: SecTickerMapPayload } | null = null;
+
+class SecHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly retryAfter: string | null,
+  ) {
+    super(message);
+    this.name = "SecHttpError";
+  }
+}
 
 function getUserAgent(): string {
   const value = process.env.SEC_USER_AGENT?.trim();
@@ -49,32 +65,77 @@ async function scheduleSecRequest<T>(request: () => Promise<T>): Promise<T> {
   }
 }
 
+export function calculateSecRetryDelayMs(
+  retryAfter: string | null,
+  attempt: number,
+  now = Date.now(),
+): number {
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return Math.min(MAX_RETRY_AFTER_MS, Math.round(seconds * 1000));
+    }
+    const date = Date.parse(retryAfter);
+    if (Number.isFinite(date)) {
+      return Math.min(MAX_RETRY_AFTER_MS, Math.max(0, date - now));
+    }
+  }
+  return Math.min(MAX_RETRY_AFTER_MS, 500 * (2 ** Math.max(0, attempt - 1)));
+}
+
+function shouldRetry(error: unknown): boolean {
+  if (error instanceof SecHttpError) {
+    return error.status === 429 || error.status >= 500;
+  }
+  return error instanceof Error && (
+    error.name === "AbortError" ||
+    error.name === "TimeoutError" ||
+    error instanceof TypeError
+  );
+}
+
 async function fetchSecJson<T>(
   url: string,
   endpoint: string,
-  schema: Parameters<typeof parseSecPayload<T>>[0],
+  schema: ZodType<T>,
 ): Promise<T> {
-  return scheduleSecRequest(async () => {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
     try {
-      const response = await fetch(url, {
-        headers: {
-          Accept: "application/json",
-          "User-Agent": getUserAgent(),
-        },
-        signal: controller.signal,
-        cache: "no-store",
+      return await scheduleSecRequest(async () => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+        try {
+          const response = await fetch(url, {
+            headers: {
+              Accept: "application/json",
+              "User-Agent": getUserAgent(),
+            },
+            signal: controller.signal,
+            cache: "no-store",
+          });
+          if (!response.ok) {
+            throw new SecHttpError(
+              `SEC ${endpoint} request failed with HTTP ${response.status}`,
+              response.status,
+              response.headers.get("retry-after"),
+            );
+          }
+          const payload: unknown = await response.json();
+          return parseSecPayload(schema, payload, endpoint);
+        } finally {
+          clearTimeout(timeout);
+        }
       });
-      if (!response.ok) {
-        throw new Error(`SEC ${endpoint} request failed with HTTP ${response.status}`);
-      }
-      const payload: unknown = await response.json();
-      return parseSecPayload(schema, payload, endpoint);
-    } finally {
-      clearTimeout(timeout);
+    } catch (error) {
+      lastError = error;
+      if (attempt >= MAX_ATTEMPTS || !shouldRetry(error)) throw error;
+      const retryAfter = error instanceof SecHttpError ? error.retryAfter : null;
+      const waitMs = calculateSecRetryDelayMs(retryAfter, attempt);
+      if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
     }
-  });
+  }
+  throw lastError instanceof Error ? lastError : new Error(`SEC ${endpoint} request failed`);
 }
 
 export async function getSecTickerMap(): Promise<SecTickerMapPayload> {
@@ -96,6 +157,19 @@ export async function getSecSubmissions(cik: string): Promise<SecSubmissionsPayl
     `${SEC_DATA_BASE}/submissions/CIK${normalized}.json`,
     "submissions",
     secSubmissionsSchema,
+  );
+}
+
+export async function getSecSubmissionHistory(
+  fileName: string,
+): Promise<SecSubmissionHistoryPayload> {
+  if (!/^CIK\d{10}-submissions-\d{3}\.json$/.test(fileName)) {
+    throw new Error("Invalid SEC submission history filename");
+  }
+  return fetchSecJson(
+    `${SEC_DATA_BASE}/submissions/${fileName}`,
+    `submissions/${fileName}`,
+    secSubmissionHistorySchema,
   );
 }
 

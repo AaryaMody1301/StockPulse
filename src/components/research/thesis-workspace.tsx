@@ -7,6 +7,7 @@ import {
   Download,
   FileClock,
   Plus,
+  RotateCcw,
   Save,
   ShieldCheck,
   Trash2,
@@ -15,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { ResearchReviewPanel } from "@/components/research/research-review-panel";
 import {
   EMPTY_THESIS_DRAFT,
   evidenceLinkSchema,
@@ -22,6 +24,7 @@ import {
   type EvidenceRelationship,
   type ThesisDraft,
   type ThesisRecord,
+  type ThesisRevision,
 } from "@/lib/thesis/schema";
 import {
   deleteThesis,
@@ -246,6 +249,30 @@ export function ThesisWorkspace() {
     }));
   }
 
+  function addGroundingEvidence(evidence: EvidenceLink) {
+    setDraft((current) => {
+      if (current.evidenceLinks.some((item) => item.url === evidence.url && item.label === evidence.label)) {
+        return current;
+      }
+      return {
+        ...current,
+        evidenceLinks: [...current.evidenceLinks, evidence].slice(0, 100),
+      };
+    });
+  }
+
+  function handleRecordUpdated(record: ThesisRecord) {
+    setRecords((current) => current.map((item) => item.id === record.id ? record : item));
+    setSelectedId(record.id);
+  }
+
+  function restoreRevision(revision: ThesisRevision) {
+    if (!selected) return;
+    setDraft({ symbol: selected.symbol, ...revision.snapshot });
+    setRevisionNote(`Restored revision from ${new Date(revision.createdAt).toLocaleString()}`);
+    setStatus("Revision restored to the editor. Review it and save to create a new revision.");
+  }
+
   function removeEvidence(index: number) {
     setDraft((current) => ({
       ...current,
@@ -262,7 +289,7 @@ export function ThesisWorkspace() {
           <p className="text-sm font-medium text-primary">Research workspace</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight">Investment theses</h1>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            Record why you follow a company, what could invalidate the thesis, and which evidence supports or challenges it. Data stays in this browser unless you export it.
+            Record why you follow a company, what could invalidate the thesis, and which evidence supports or challenges it. Data stays in this browser unless you export it or explicitly send a thesis to configured AI analysis.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -324,6 +351,9 @@ export function ThesisWorkspace() {
                     <span className="text-[11px] text-muted-foreground">{record.revisions.length} revisions</span>
                   </div>
                   <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{record.title}</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    {record.lastReviewedAt ? `Reviewed ${new Date(record.lastReviewedAt).toLocaleDateString()}` : "Evidence not reviewed yet"}
+                  </p>
                 </button>
               ))
             )}
@@ -470,7 +500,7 @@ export function ThesisWorkspace() {
                       placeholder="Why this evidence matters"
                     />
                     <div className="flex items-center justify-between">
-                      {item.url.startsWith("http") ? (
+                      {evidenceLinkSchema.safeParse(item).success ? (
                         <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
                           Open source
                         </a>
@@ -485,6 +515,13 @@ export function ThesisWorkspace() {
               )}
             </CardContent>
           </Card>
+
+          <ResearchReviewPanel
+            record={selected}
+            draft={draft}
+            onRecordUpdated={handleRecordUpdated}
+            onAddEvidence={addGroundingEvidence}
+          />
 
           <Card>
             <CardHeader><CardTitle className="flex items-center gap-2 text-base"><FileClock className="h-4 w-4" />Revision history</CardTitle></CardHeader>
@@ -502,6 +539,10 @@ export function ThesisWorkspace() {
                         <span className="text-xs text-muted-foreground">{new Date(revision.createdAt).toLocaleString()}</span>
                       </div>
                       <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{revision.snapshot.summary || "No thesis summary in this revision."}</p>
+                      <Button variant="ghost" size="sm" className="mt-2" onClick={() => restoreRevision(revision)}>
+                        <RotateCcw className="h-4 w-4" />
+                        Restore to editor
+                      </Button>
                     </div>
                   ))}
                 </div>

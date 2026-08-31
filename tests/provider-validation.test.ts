@@ -2,6 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   finnhubCandleSchema,
+  finnhubNewsSchema,
+  finnhubProfileSchema,
+  httpUrlSchema,
   parseFiniteNumber,
   parseProviderPayload,
   twelveDataQuoteSchema,
@@ -75,4 +78,46 @@ test("parseFiniteNumber rejects non-numeric and empty provider values", () => {
   assert.equal(parseFiniteNumber("123.45", "close"), 123.45);
   assert.throws(() => parseFiniteNumber("not-a-number", "close"), /Invalid numeric value/);
   assert.throws(() => parseFiniteNumber("   ", "close"), /Invalid numeric value/);
+});
+
+test("provider URL schema only accepts http and https URLs", () => {
+  assert.equal(httpUrlSchema.parse("https://example.com/path"), "https://example.com/path");
+  assert.equal(httpUrlSchema.parse("http://example.com"), "http://example.com");
+  assert.throws(() => httpUrlSchema.parse("javascript:alert(1)"), /HTTP\(S\)/);
+  assert.throws(() => httpUrlSchema.parse("not a url"));
+});
+
+test("Finnhub profile rejects unsafe non-empty website URLs", () => {
+  assert.throws(() => finnhubProfileSchema.parse({
+    ticker: "AAPL",
+    name: "Apple",
+    logo: "",
+    weburl: "javascript:alert(1)",
+    finnhubIndustry: "Technology",
+    marketCapitalization: 1,
+    country: "US",
+    currency: "USD",
+  }), /HTTP\(S\)/);
+});
+
+test("Finnhub news rejects unsafe article URLs while allowing an empty image", () => {
+  assert.doesNotThrow(() => finnhubNewsSchema.parse([{
+    headline: "Example",
+    summary: "Summary",
+    source: "Example",
+    url: "https://example.com/article",
+    image: "",
+    category: "general",
+    datetime: 1,
+  }]));
+
+  assert.throws(() => finnhubNewsSchema.parse([{
+    headline: "Example",
+    summary: "Summary",
+    source: "Example",
+    url: "data:text/html,unsafe",
+    image: "",
+    category: "general",
+    datetime: 1,
+  }]), /HTTP\(S\)/);
 });

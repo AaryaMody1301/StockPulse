@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { marketData } from "@/lib/providers";
+import { canonicalMarket } from "@/lib/market/repository";
 import { MarketTable } from "@/components/markets/market-table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -22,11 +22,8 @@ import { AnimatedQuoteCards } from "@/components/home/animated-quote-cards";
 import { MarketPulseCards } from "@/components/home/market-pulse-cards";
 import { QuickActions } from "@/components/home/quick-actions";
 
-// Force dynamic rendering — data changes frequently.
 export const dynamic = "force-dynamic";
 
-// Phase 1 uses a curated starter universe. These symbols are not intended to
-// represent the full US market or a computed trending/gainers ranking.
 const TRENDING_SYMBOLS = [
   "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA",
   "META", "NVDA", "JPM", "V", "JNJ",
@@ -87,12 +84,12 @@ function QuoteCardsSkeleton() {
 }
 
 async function TrendingQuotesServer() {
-  const quotes = await marketData.getQuotes(TRENDING_SYMBOLS);
+  const quotes = await canonicalMarket.getQuotes(TRENDING_SYMBOLS);
   if (quotes.length === 0) {
     return (
       <div className="py-12 text-center text-muted-foreground">
         <p>Unable to load market data.</p>
-        <p className="text-sm">Please check your API keys in .env.local</p>
+        <p className="text-sm">Check configured providers or stored market data.</p>
       </div>
     );
   }
@@ -101,17 +98,17 @@ async function TrendingQuotesServer() {
 
 async function SectorTable({ sector }: { sector: string }) {
   const symbols = SECTOR_SYMBOLS[sector] || TRENDING_SYMBOLS;
-  const quotes = await marketData.getQuotes(symbols);
+  const quotes = await canonicalMarket.getQuotes(symbols);
   return <MarketTable quotes={quotes} />;
 }
 
 async function FullMarketTable() {
-  const quotes = await marketData.getQuotes(TRENDING_SYMBOLS);
+  const quotes = await canonicalMarket.getQuotes(TRENDING_SYMBOLS);
   return <MarketTable quotes={quotes} />;
 }
 
 async function GainersLosers() {
-  const quotes = await marketData.getQuotes(TRENDING_SYMBOLS);
+  const quotes = await canonicalMarket.getQuotes(TRENDING_SYMBOLS);
   if (quotes.length === 0) return null;
 
   const sorted = [...quotes].sort((a, b) => b.changePct - a.changePct);
@@ -189,7 +186,7 @@ function MiniQuoteRow({ quote }: { quote: Quote }) {
 }
 
 async function MarketPulseServer() {
-  const quotes = await marketData.getQuotes(TRENDING_SYMBOLS);
+  const quotes = await canonicalMarket.getQuotes(TRENDING_SYMBOLS);
   if (quotes.length === 0) return null;
 
   const avgChange = quotes.reduce((sum, quote) => sum + quote.changePct, 0) / quotes.length;
@@ -207,7 +204,7 @@ async function MarketPulseServer() {
 }
 
 async function TickerTapeDataProvider() {
-  const quotes = await marketData.getQuotes(TRENDING_SYMBOLS);
+  const quotes = await canonicalMarket.getQuotes(TRENDING_SYMBOLS);
   if (quotes.length === 0) return null;
   return <TickerTapeServer quotes={quotes} />;
 }

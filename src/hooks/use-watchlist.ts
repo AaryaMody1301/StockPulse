@@ -1,21 +1,40 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { parseStoredWatchlist, watchlistStorageSchema } from "@/lib/client-storage";
 
-const WATCHLIST_KEY = "investsmart-watchlist";
+const WATCHLIST_KEY = "stockpulse-watchlist";
+const LEGACY_WATCHLIST_KEY = "investsmart-watchlist";
 
-function readWatchlist(): string[] {
-  if (typeof window === "undefined") return [];
+function parseJson(raw: string | null): unknown {
+  if (!raw) return null;
   try {
-    const raw = localStorage.getItem(WATCHLIST_KEY);
-    return raw ? JSON.parse(raw) : [];
+    return JSON.parse(raw) as unknown;
   } catch {
-    return [];
+    return null;
   }
 }
 
+function readWatchlist(): string[] {
+  if (typeof window === "undefined") return [];
+
+  const currentRaw = localStorage.getItem(WATCHLIST_KEY);
+  if (currentRaw !== null) {
+    return parseStoredWatchlist(parseJson(currentRaw)) ?? [];
+  }
+
+  const legacyRaw = localStorage.getItem(LEGACY_WATCHLIST_KEY);
+  if (legacyRaw === null) return [];
+  const migrated = parseStoredWatchlist(parseJson(legacyRaw));
+  if (!migrated) return [];
+
+  localStorage.setItem(WATCHLIST_KEY, JSON.stringify(migrated));
+  return migrated;
+}
+
 function writeWatchlist(symbols: string[]) {
-  localStorage.setItem(WATCHLIST_KEY, JSON.stringify(symbols));
+  const validated = watchlistStorageSchema.parse(symbols);
+  localStorage.setItem(WATCHLIST_KEY, JSON.stringify(validated));
   window.dispatchEvent(new CustomEvent("watchlist-change"));
 }
 
@@ -33,30 +52,24 @@ export function useWatchlist() {
   }, []);
 
   const add = useCallback((symbol: string) => {
-    const current = readWatchlist();
-    const upper = symbol.toUpperCase();
-    if (!current.includes(upper)) {
-      writeWatchlist([...current, upper]);
-    }
+    const parsed = watchlistStorageSchema.safeParse([...readWatchlist(), symbol]);
+    if (parsed.success) writeWatchlist(parsed.data);
   }, []);
 
   const remove = useCallback((symbol: string) => {
-    const current = readWatchlist();
-    writeWatchlist(current.filter((s) => s !== symbol.toUpperCase()));
+    const upper = symbol.trim().toUpperCase();
+    writeWatchlist(readWatchlist().filter((item) => item !== upper));
   }, []);
 
   const has = useCallback(
-    (symbol: string) => symbols.includes(symbol.toUpperCase()),
+    (symbol: string) => symbols.includes(symbol.trim().toUpperCase()),
     [symbols],
   );
 
   const toggle = useCallback(
     (symbol: string) => {
-      if (has(symbol)) {
-        remove(symbol);
-      } else {
-        add(symbol);
-      }
+      if (has(symbol)) remove(symbol);
+      else add(symbol);
     },
     [has, add, remove],
   );

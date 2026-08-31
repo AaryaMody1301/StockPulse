@@ -55,6 +55,8 @@ export const thesisRecordSchema = thesisSnapshotSchema.extend({
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   revisions: z.array(thesisRevisionSchema).max(50),
+  lastReviewedAt: z.string().datetime().nullable().default(null),
+  reviewedEvidenceIds: z.array(z.string().trim().min(1).max(500)).max(250).default([]),
 });
 
 export const thesisExportBundleSchema = z.object({

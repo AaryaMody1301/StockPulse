@@ -150,3 +150,24 @@ test("grounded analysis schema rejects recommendation-shaped extra fields", () =
     recommendation: "BUY",
   }, bundle));
 });
+
+test("grounded analysis rejects recommendation language hidden inside allowed text fields", () => {
+  const bundle = buildGroundingBundle(evidence, changes);
+  assert.ok(bundle);
+  const filing = bundle.evidence.find((item) => item.kind === "filing");
+  assert.ok(filing);
+
+  assert.throws(() => validateGroundedAnalysis({
+    format: "stockpulse-grounded-analysis",
+    version: 1,
+    summary: "This evidence means investors should buy the stock.",
+    claims: [
+      {
+        type: "Inference",
+        text: "Revenue increased in the stored comparison.",
+        evidenceIds: [filing.id],
+      },
+    ],
+    uncertainties: [],
+  }, bundle), /recommendation language/);
+});

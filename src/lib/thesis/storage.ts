@@ -1,5 +1,6 @@
 "use client";
 
+import { normalizeStockSymbol } from "@/lib/symbols";
 import {
   thesisExportBundleSchema,
   thesisRecordSchema,
@@ -13,6 +14,7 @@ const DB_NAME = "stockpulse-research";
 const DB_VERSION = 1;
 const THESIS_STORE = "theses";
 const MAX_REVISIONS = 50;
+const MAX_REVIEWED_EVIDENCE = 250;
 
 function id(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`;
@@ -87,6 +89,11 @@ export async function saveThesis(
   existing: ThesisRecord | null,
   revisionNote = "Updated thesis",
 ): Promise<ThesisRecord> {
+  const normalizedSymbol = normalizeStockSymbol(draft.symbol);
+  if (existing && normalizedSymbol !== existing.symbol) {
+    throw new Error("A saved thesis ticker cannot be changed. Create a new thesis for another company.");
+  }
+
   const snapshot = thesisSnapshot(draft);
   const now = new Date().toISOString();
 
@@ -106,10 +113,35 @@ export async function saveThesis(
   const record = thesisRecordSchema.parse({
     ...snapshot,
     id: existing?.id || id("thesis"),
-    symbol: draft.symbol,
+    symbol: normalizedSymbol,
     createdAt: existing?.createdAt || now,
     updatedAt: now,
     revisions: revisions.slice(0, MAX_REVISIONS),
+    lastReviewedAt: existing?.lastReviewedAt ?? null,
+    reviewedEvidenceIds: existing?.reviewedEvidenceIds ?? [],
+  });
+
+  await withStore("readwrite", async (store) => {
+    await requestResult(store.put(record));
+  });
+  return record;
+}
+
+export async function markThesisReviewed(
+  recordId: string,
+  evidenceIds: string[],
+): Promise<ThesisRecord> {
+  const existing = await getThesis(recordId);
+  if (!existing) throw new Error("Thesis record was not found");
+
+  const reviewedEvidenceIds = [...new Set(evidenceIds.map((value) => value.trim()).filter(Boolean))]
+    .slice(0, MAX_REVIEWED_EVIDENCE);
+  const now = new Date().toISOString();
+  const record = thesisRecordSchema.parse({
+    ...existing,
+    updatedAt: now,
+    lastReviewedAt: now,
+    reviewedEvidenceIds,
   });
 
   await withStore("readwrite", async (store) => {

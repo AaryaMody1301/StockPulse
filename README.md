@@ -1,261 +1,220 @@
-# StockPulse: Setup, Verification, and Run Guide
+# StockPulse
 
-StockPulse is a Next.js stock-market analytics application with market-data provider fallback, PostgreSQL/Prisma storage, background quote/history workers, stock comparison, news, browser-local watchlists, and browser-local portfolio tracking.
+StockPulse is an evidence-first investment research application built with Next.js, PostgreSQL/Prisma, SEC EDGAR data, and optional grounded AI.
 
-The longer-term product upgrade is documented in [`docs/UPGRADE_PLAN.md`](docs/UPGRADE_PLAN.md). Production assumptions and data-source constraints are documented in [`docs/OPERATIONS.md`](docs/OPERATIONS.md).
+Its core question is:
 
-## 1. Prerequisites
+> What changed since I last reviewed this company, does the evidence affect my thesis, and where did that evidence come from?
 
-Install:
+StockPulse is a research tool, not a BUY/HOLD/SELL engine and not personalized investment advice.
 
-1. Node.js 20.19+ (Node 22 recommended and used by CI)
-2. npm 10+
-3. PostgreSQL 14+
-4. Git
+## What is included
 
-Verify:
+- Curated market dashboard with provider fallback and a canonical database-first read layer.
+- Stock detail pages with price history, company information, news, and stored SEC evidence.
+- SEC ticker-to-CIK resolution, filing ingestion, normalized XBRL metrics, bounded retries, and continuation-history support.
+- Deterministic period-over-period change detection with accession/concept provenance.
+- Browser-local watchlists and portfolios with validated legacy-data migration.
+- Browser-local thesis workspace with assumptions, risks, catalysts, invalidation criteria, revision restore, and evidence relationships.
+- Stable evidence-review checkpoints and “new since last review” research state.
+- Watchlist-level research digest for companies with saved theses.
+- Versioned grounding packets that label source facts separately from deterministic calculations.
+- Optional server-configured AI analysis and “challenge my thesis” workflows. Every returned claim must cite a known grounding evidence ID and pass runtime validation before display.
+- GitHub Actions verification with PostgreSQL migration deployment, TypeScript, ESLint, unit/integration tests, and a production Next.js build.
 
-```powershell
-node -v
-npm -v
+## Stack
+
+- Next.js 16 / React 19 / TypeScript
+- PostgreSQL + Prisma
+- Zod runtime validation
+- Finnhub primary market-data integration with Twelve Data fallback where supported
+- SEC EDGAR submissions + companyfacts APIs
+- IndexedDB for thesis research; localStorage for watchlist/portfolio
+- Optional OpenAI-compatible AI endpoint; Vercel AI Gateway is the default base URL when configured
+
+## Requirements
+
+- Node.js 20.19+; Node 22 is used in CI
+- npm
+- PostgreSQL for persistent market/SEC data
+- At least one supported market-data API key for live market-data provider reads
+- A descriptive `SEC_USER_AGENT` before automated SEC ingestion
+
+## Setup
+
+```bash
+git clone https://github.com/AaryaMody1301/StockPulse.git
+cd StockPulse
+npm ci
+cp .env.example .env.local
+cp .env.example .env
 ```
 
-## 2. Clone and install
+Configure the environment files without committing credentials. The Next.js app reads normal Next.js environment files; standalone scripts load `.env` through `dotenv/config`.
 
-```powershell
-git clone <your-repo-url>
-cd stock-market
-npm install
+Apply the database schema:
+
+```bash
+npx prisma migrate deploy --schema=prisma/schema.prisma
 ```
 
-For CI and reproducible production installs, prefer `npm ci` with the checked-in lockfile.
+For local development:
 
-## 3. Market-data providers
-
-The application supports:
-
-1. `FINNHUB_API_KEY` as the primary provider
-2. `TWELVEDATA_API_KEY` as a fallback for supported quote/search/history operations
-
-### 3.1 Finnhub
-
-1. Go to `https://finnhub.io/`
-2. Create an account and obtain an API key
-3. Put the key in `FINNHUB_API_KEY`
-
-Provider plans, quotas, endpoint availability, and usage rights can change. Confirm the endpoints available to the plan actually used by the deployment.
-
-### 3.2 Twelve Data
-
-1. Go to `https://twelvedata.com/`
-2. Create an account and obtain an API key
-3. Put the key in `TWELVEDATA_API_KEY`
-
-Twelve Data is used as a fallback for supported quote, symbol-search, and daily-history requests. Company-profile and news behavior is intentionally not assumed to be equivalent across providers.
-
-> Public display/redistribution rights depend on the provider plan and market. Review [`docs/OPERATIONS.md`](docs/OPERATIONS.md) before deploying market data publicly.
-
-## 4. Environment configuration
-
-Copy `.env.example` to both `.env.local` and `.env`:
-
-```powershell
-Copy-Item .env.example .env.local
-Copy-Item .env.example .env
-```
-
-The Next.js app reads `.env.local`. The standalone TypeScript workers use `dotenv/config` and read `.env`.
-
-Example:
-
-```env
-DATABASE_URL="postgresql://user:password@localhost:5432/stockmarket?schema=public"
-FINNHUB_API_KEY="your_finnhub_key"
-TWELVEDATA_API_KEY="your_twelvedata_key"
-NEXT_PUBLIC_APP_URL="http://localhost:3000"
-POLL_INTERVAL_MS="15000"
-POLL_SYMBOLS="AAPL,MSFT,GOOGL,AMZN,TSLA,META,NVDA,JPM,V,JNJ"
-```
-
-Never commit real credentials.
-
-## 5. PostgreSQL and Prisma
-
-Create a database:
-
-```sql
-CREATE DATABASE stockmarket;
-```
-
-Point `DATABASE_URL` at the real database, then run:
-
-```powershell
-npx prisma migrate dev
-npx prisma generate
-```
-
-For an existing production database, use the checked-in migrations with:
-
-```powershell
-npx prisma migrate deploy
-```
-
-Optional local inspection:
-
-```powershell
-npx prisma studio
-```
-
-## 6. Verify the repository
-
-Phase 1 adds one verification gate for application code and workers:
-
-```powershell
-npm run check
-```
-
-It runs:
-
-1. application TypeScript checking
-2. worker TypeScript checking
-3. ESLint
-4. unit tests
-
-Then verify a production build:
-
-```powershell
-npm run build
-```
-
-Do not deploy a branch that fails either command.
-
-## 7. Run the website locally
-
-```powershell
+```bash
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+For a production-mode check:
 
-Production-mode local check:
-
-```powershell
+```bash
+npm run check
 npm run build
-npm run start
+npm start
 ```
 
-## 8. Run data workers
+## Environment variables
 
-### 8.1 Quote poller
+See `.env.example` for the full template.
 
-```powershell
+Required by the relevant feature:
+
+- `DATABASE_URL` — PostgreSQL connection string.
+- `FINNHUB_API_KEY` — primary market-data provider key.
+- `TWELVEDATA_API_KEY` — optional fallback key for supported operations.
+- `SEC_USER_AGENT` — descriptive application/company name plus monitored contact for automated EDGAR access.
+- `NEXT_PUBLIC_APP_URL` — canonical public application origin used by metadata, sitemap, and robots output.
+
+Optional grounded AI is **disabled unless both a key and model are configured**:
+
+- `AI_GATEWAY_API_KEY` or `AI_API_KEY`
+- `AI_MODEL`
+- `AI_BASE_URL` — defaults to `https://ai-gateway.vercel.sh/v1`; may point to another trusted OpenAI-compatible endpoint.
+
+API keys stay server-side. StockPulse never stores model-provider credentials in browser research storage.
+
+## SEC ingestion
+
+Ingest one or more tickers:
+
+```bash
+npm run ingest:sec -- AAPL
+npm run ingest:sec -- AAPL MSFT NVDA
+```
+
+The ingestion path:
+
+1. resolves ticker identity through the SEC ticker map;
+2. fetches current submissions and companyfacts;
+3. serializes SEC requests below the documented fair-access ceiling;
+4. retries bounded 429/5xx/network-timeout failures and honors bounded `Retry-After` delays;
+5. reads referenced continuation submission files when the recent research-relevant history is thin;
+6. filters supported research forms and stores filing provenance;
+7. deterministically maps a deliberately small metric set;
+8. inserts facts/metrics/filings idempotently;
+9. records `success`, `partial`, or `failed` job outcomes.
+
+Current normalized metrics include revenue, net income, EPS, cash, long-term debt where a supported source concept exists, shares outstanding, operating cash flow, and capex. Missing source concepts remain missing; StockPulse does not invent them.
+
+## Research workflow
+
+1. Open a company and inspect stored SEC evidence and deterministic changes.
+2. Create or open a thesis under `/research`.
+3. Record assumptions, risks, catalysts, and concrete invalidation criteria.
+4. Add evidence manually or import a stored SEC evidence item as an **unresolved** thesis relationship.
+5. Classify evidence as `supports`, `contradicts`, `qualifies`, or `unresolved`.
+6. Mark the current grounding evidence set reviewed.
+7. Later, StockPulse compares stable evidence IDs and surfaces newly stored evidence since that checkpoint.
+8. Restore an earlier thesis revision into the editor when needed, then save it as a new revision.
+9. Export important browser-local research regularly.
+
+The watchlist digest uses the same local review checkpoints for watched companies that have saved theses.
+
+## Optional grounded AI
+
+AI is an optional layer over deterministic evidence; it is not required for core research.
+
+The server builds a bounded `stockpulse-grounding` packet containing stored SEC filings, normalized facts, and deterministic changes. A model response must match the strict `stockpulse-grounded-analysis` contract:
+
+- claims are labeled `Fact`, `Derived`, or `Inference`;
+- every claim cites one or more evidence IDs present in the packet;
+- invented evidence IDs are rejected;
+- unexpected output fields are rejected;
+- recommendation language such as BUY/HOLD/SELL or price targets is rejected;
+- provider/model failures leave deterministic evidence usable.
+
+“Challenge my thesis” sends the current thesis only after an explicit user action; normal browser-local research is not silently uploaded to an AI endpoint.
+
+## Workers
+
+Quote polling:
+
+```bash
 npx tsx scripts/poll-quotes.ts
 ```
 
-The Phase 1 poller:
+Historical daily backfill:
 
-1. validates and de-duplicates configured symbols on startup
-2. runs only one polling cycle at a time
-3. upserts snapshots on `(symbolId, timestamp)` so repeated provider timestamps are safe
-4. records `success`, `partial`, or `failed` job outcomes
-5. records per-symbol failures in job metadata
-
-Finnhub `/quote` does not supply quote volume; Finnhub-backed snapshot volume is currently stored as `0` and explicitly recorded as a limitation in job metadata. Do not build volume analytics from `quote_snapshots` until the source/model is upgraded.
-
-### 8.2 Historical daily backfill
-
-```powershell
+```bash
 npx tsx scripts/backfill-daily.ts
 ```
 
-The backfill fetches approximately one year of daily OHLCV for active symbols and inserts missing `(symbolId, date)` rows while skipping duplicates.
+The quote poller is non-overlapping, idempotent for repeated provider timestamps, and records partial failures. Finnhub `/quote` does not supply volume; Finnhub-backed quote-snapshot volume remains `0` and should not be used as a reliable volume signal.
 
-## 9. API health checks
+## Verification
 
-With the app running:
-
-```powershell
-curl "http://localhost:3000/api/health"
-curl "http://localhost:3000/api/quotes?symbols=AAPL,MSFT"
-curl "http://localhost:3000/api/stocks/search?q=apple"
-curl "http://localhost:3000/api/news?category=general"
+```bash
+npm run check
+npm run build
 ```
 
-Expected:
+`npm run check` runs application TypeScript checking, worker/CLI TypeScript checking, ESLint, and tests.
 
-1. `/api/health` returns `status: "ok"`
-2. valid data routes return JSON responses
-3. malformed ticker lists are rejected with HTTP 400 before provider calls
+CI additionally starts PostgreSQL, applies all checked-in migrations with `prisma migrate deploy`, verifies an idempotent SEC database write, and then runs the production build.
 
-## 10. Production: current Hostinger/VPS pattern
+## Main routes
+
+- `/` — curated market dashboard
+- `/stocks/[symbol]` — company detail + SEC evidence
+- `/stocks/[symbol]/changes` — deterministic metric changes
+- `/stocks/[symbol]/grounding` — bounded grounding packet + optional AI analysis
+- `/research` — local thesis and review workspace
+- `/watchlist` — tracked symbols + research-change digest
+- `/portfolio` — browser-local holdings and P&L
+- `/compare` — canonical daily-history comparison
+- `/news` — provider-backed market/company news
+- `/api/health` — basic application health route
+
+## Deployment
 
 The repository includes:
 
-1. `ecosystem.config.js` for PM2
-2. `deploy/nginx.conf` for the reverse proxy/TLS pattern
-3. `server.js` as the production Node entry point
+- `server.js` for Node/Hostinger-style startup;
+- `ecosystem.config.js` for PM2 web + quote-poller processes;
+- `deploy/nginx.conf` as a reverse-proxy/TLS example.
 
-The checked-in deployment configs currently assume the application path is:
+PM2 uses the current repository directory by default. Set `STOCKPULSE_APP_DIR` if the processes should run from another path.
 
-```text
-/var/www/investsmart
-```
+Before production deployment:
 
-Keep that path unless you update **all** deployment configs together.
+1. configure environment variables outside version control;
+2. run `npm ci`;
+3. run `npx prisma migrate deploy`;
+4. run `npm run check` and `npm run build`;
+5. verify `/api/health` and credentialed market-provider routes;
+6. perform an identified live SEC ingestion with the real `SEC_USER_AGENT`;
+7. verify actual data-provider display/redistribution rights for the plan and markets in use.
 
-Typical deployment:
+Operational constraints and security notes are in [`docs/OPERATIONS.md`](docs/OPERATIONS.md). The implementation history and product principles remain in [`docs/UPGRADE_PLAN.md`](docs/UPGRADE_PLAN.md).
 
-1. Install Node.js 20.19+ (Node 22 recommended), npm, PostgreSQL, Nginx, and PM2.
-2. Clone/update the repo at `/var/www/investsmart`.
-3. Run `npm ci`. Keep development/build dependencies available while Prisma generation/migrations, checks, and the production build run. `tsx` itself is a runtime dependency because PM2 uses it for the quote worker.
-4. Create production `.env`/`.env.local` values outside version control.
-5. Run `npx prisma migrate deploy`.
-6. Run `npm run check`.
-7. Run `npm run build`.
-8. Start/reload PM2 with `ecosystem.config.js`.
-9. Configure Nginx from `deploy/nginx.conf` with the real domain/certificate paths.
-10. Verify `/api/health`, then verify quote/search/news routes.
-11. Save PM2 state and reload Nginx.
+## Privacy and safety boundaries
 
-The web process intentionally stays at one instance in Phase 1 because the custom cache and rate limiter are process-local. Read [`docs/OPERATIONS.md`](docs/OPERATIONS.md) before scaling horizontally.
+- Thesis research stays in IndexedDB unless the user exports it or explicitly invokes an AI workflow.
+- Watchlist/portfolio records are browser-local and runtime-validated before becoming application state.
+- External provider/SEC responses are treated as untrusted input.
+- Evidence content is data, not executable model instructions.
+- No browser storage contains provider API credentials.
+- StockPulse does not issue automatic investment recommendations or price targets.
 
-## 11. Troubleshooting
+## Known operator responsibilities
 
-### `FINNHUB_API_KEY is not set`
-
-- Confirm the key exists in the environment file used by the process.
-- Restart the relevant app/worker after changing environment variables.
-
-### Prisma connection failure
-
-- Recheck `DATABASE_URL`.
-- Confirm PostgreSQL is reachable.
-- Confirm the database user has the required permissions.
-
-### Website works but worker scripts fail
-
-- Confirm `.env` exists; the workers use `dotenv/config`.
-- Confirm the production install contains the `tsx` runtime dependency.
-- Run `npm run typecheck:scripts` before restarting PM2.
-
-### Provider returns quota/error JSON
-
-Phase 1 runtime-validates provider payloads. Invalid provider JSON is treated as an error rather than converted into zero-valued market data; quote/search/history operations can then use the configured fallback where supported.
-
-### Production build fails
-
-- Run `npm run check` first.
-- Confirm generated Prisma client setup succeeds.
-- Confirm required environment variables are present.
-- Run `npx prisma migrate deploy` for production schema changes.
-
-## 12. Security and operational notes
-
-- Never commit `.env` or `.env.local`.
-- Rotate leaked API keys immediately.
-- Keep database credentials least-privileged.
-- Keep the Node process behind the configured reverse proxy.
-- Treat external provider responses as untrusted input.
-- Verify third-party market-data display/redistribution rights before public production use.
-- Phase 1 pins patched framework/runtime lines instead of relying on broad semver ranges for Next.js, React, Prisma, and `tsx`.
-- Review the known dependency-audit exception in [`docs/OPERATIONS.md`](docs/OPERATIONS.md) before deployment.
+The repository can test schemas, migrations, provider parsers, deterministic calculations, and builds without production credentials. It cannot prove your private provider subscription entitlements, production PostgreSQL networking, reverse-proxy configuration, or real credentialed provider/SEC behavior. Run those deployment smoke checks in the target environment before public release.
