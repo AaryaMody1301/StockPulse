@@ -43,7 +43,7 @@ function easternParts(now: Date): EasternParts {
     minute: "2-digit",
     hourCycle: "h23",
   }).formatToParts(now);
-  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
   const weekdayMap: Record<string, number> = {
     Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
   };
@@ -121,9 +121,9 @@ function fallbackHolidays(year: number): Set<string> {
   ]);
 }
 
-function fallbackEarlyCloses(year: number, holidays: Set<string>): Set<string> {
+function fallbackEarlyCloses(year: number, holidays: ReadonlySet<string>): Set<string> {
   const thanksgiving = nthWeekday(year, 10, 4, 4);
-  const afterThanksgiving = new Date(thanksgiving);
+  const afterThanksgiving = new Date(thanksgiving.getTime());
   afterThanksgiving.setUTCDate(afterThanksgiving.getUTCDate() + 1);
   const candidates = [
     new Date(Date.UTC(year, 6, 3)),
@@ -141,12 +141,10 @@ export function getUsMarketStatus(now = new Date()): MarketStatus {
   const date = isoDate(et.year, et.month, et.day);
   if (et.weekday === 0 || et.weekday === 6) return "closed";
 
-  const publishedHolidays = PUBLISHED_HOLIDAYS[et.year];
-  const holidays = publishedHolidays ?? fallbackHolidays(et.year);
+  const holidays = PUBLISHED_HOLIDAYS[et.year] ?? fallbackHolidays(et.year);
   if (holidays.has(date)) return "closed";
 
-  const publishedEarlyCloses = PUBLISHED_EARLY_CLOSES[et.year];
-  const earlyCloses = publishedEarlyCloses ?? fallbackEarlyCloses(et.year, holidays as Set<string>);
+  const earlyCloses = PUBLISHED_EARLY_CLOSES[et.year] ?? fallbackEarlyCloses(et.year, holidays);
 
   const mins = et.hour * 60 + et.minute;
   const openMins = US_MARKET.openHour * 60 + US_MARKET.openMinute;
