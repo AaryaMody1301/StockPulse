@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useWatchlist } from "@/hooks/use-watchlist";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { Eye, Plus, Star, Trash2, RefreshCw } from "lucide-react";
 import type { Quote } from "@/lib/providers/types";
+import { mergeQuoteSnapshot } from "@/lib/quote-state";
 import { RefreshCountdown } from "@/components/refresh-countdown";
 
 export default function WatchlistPage() {
@@ -29,12 +30,14 @@ export default function WatchlistPage() {
       setQuotes([]);
       return;
     }
+
+    setQuotes((previous) => mergeQuoteSnapshot(symbols, previous, []));
     setLoading(true);
     try {
       const res = await fetch(`/api/quotes?symbols=${symbols.join(",")}`);
       if (res.ok) {
-        const json = await res.json();
-        setQuotes(json.data || []);
+        const json = await res.json() as { data?: Quote[] };
+        setQuotes((previous) => mergeQuoteSnapshot(symbols, previous, json.data || []));
       }
     } catch {
       // Keep the last successful quotes visible on transient errors.
@@ -46,6 +49,18 @@ export default function WatchlistPage() {
   useEffect(() => {
     void fetchQuotes();
   }, [fetchQuotes]);
+
+  const quoteMap = useMemo(
+    () => new Map(quotes.map((quote) => [quote.symbol, quote])),
+    [quotes],
+  );
+  const availableQuotes = symbols
+    .map((symbol) => quoteMap.get(symbol))
+    .filter((quote): quote is Quote => Boolean(quote));
+  const missingPriceCount = symbols.length - availableQuotes.length;
+  const averageChange = availableQuotes.length > 0
+    ? availableQuotes.reduce((sum, quote) => sum + quote.changePct, 0) / availableQuotes.length
+    : null;
 
   if (symbols.length === 0) {
     return (
@@ -107,30 +122,36 @@ export default function WatchlistPage() {
           </div>
         </section>
 
-        {quotes.length > 0 && (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <SummaryCard label="Total Stocks" value={String(quotes.length)} />
-            <SummaryCard
-              label="Gainers"
-              value={String(quotes.filter((q) => q.change > 0).length)}
-              className="text-emerald-500"
-            />
-            <SummaryCard
-              label="Losers"
-              value={String(quotes.filter((q) => q.change < 0).length)}
-              className="text-red-500"
-            />
-            <SummaryCard
-              label="Avg Change"
-              value={`${(quotes.reduce((sum, quote) => sum + quote.changePct, 0) / quotes.length).toFixed(2)}%`}
-              className={
-                quotes.reduce((sum, quote) => sum + quote.changePct, 0) >= 0
-                  ? "text-emerald-500"
-                  : "text-red-500"
-              }
-            />
+        {missingPriceCount > 0 && (
+          <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+            Current quotes are unavailable for {missingPriceCount} watched stock{missingPriceCount === 1 ? "" : "s"}. Those symbols remain visible and tracked instead of disappearing from the watchlist.
           </div>
         )}
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <SummaryCard label="Tracked" value={String(symbols.length)} />
+          <SummaryCard
+            label="Gainers"
+            value={String(availableQuotes.filter((q) => q.change > 0).length)}
+            className="text-emerald-500"
+          />
+          <SummaryCard
+            label="Losers"
+            value={String(availableQuotes.filter((q) => q.change < 0).length)}
+            className="text-red-500"
+          />
+          <SummaryCard
+            label="Avg Quoted Change"
+            value={averageChange === null ? "—" : `${averageChange.toFixed(2)}%`}
+            className={
+              averageChange === null
+                ? undefined
+                : averageChange >= 0
+                  ? "text-emerald-500"
+                  : "text-red-500"
+            }
+          />
+        </div>
 
         <WatchlistResearchDigest symbols={symbols} />
 
@@ -148,40 +169,43 @@ export default function WatchlistPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {quotes.map((quote) => (
-                <TableRow key={quote.symbol} className="hover:bg-muted/50">
-                  <TableCell className="font-semibold">
-                    <Link href={`/stocks/${quote.symbol}`} className="hover:underline">
-                      {quote.symbol}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-right font-mono tabular-nums">
-                    {formatPrice(quote.price)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <PriceChange change={quote.change} changePct={quote.changePct} />
-                  </TableCell>
-                  <TableCell className="hidden text-right font-mono tabular-nums sm:table-cell">
-                    {formatVolume(quote.volume)}
-                  </TableCell>
-                  <TableCell className="hidden text-right font-mono tabular-nums md:table-cell">
-                    {formatPrice(quote.high)}
-                  </TableCell>
-                  <TableCell className="hidden text-right font-mono tabular-nums md:table-cell">
-                    {formatPrice(quote.low)}
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      onClick={() => remove(quote.symbol)}
-                      className="text-muted-foreground hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {symbols.map((symbol) => {
+                const quote = quoteMap.get(symbol);
+                return (
+                  <TableRow key={symbol} className="hover:bg-muted/50">
+                    <TableCell className="font-semibold">
+                      <Link href={`/stocks/${symbol}`} className="hover:underline">
+                        {symbol}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-right font-mono tabular-nums">
+                      {quote ? formatPrice(quote.price) : "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {quote ? <PriceChange change={quote.change} changePct={quote.changePct} /> : "—"}
+                    </TableCell>
+                    <TableCell className="hidden text-right font-mono tabular-nums sm:table-cell">
+                      {quote ? formatVolume(quote.volume) : "—"}
+                    </TableCell>
+                    <TableCell className="hidden text-right font-mono tabular-nums md:table-cell">
+                      {quote ? formatPrice(quote.high) : "—"}
+                    </TableCell>
+                    <TableCell className="hidden text-right font-mono tabular-nums md:table-cell">
+                      {quote ? formatPrice(quote.low) : "—"}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={() => remove(symbol)}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
