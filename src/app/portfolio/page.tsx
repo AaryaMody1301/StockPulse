@@ -56,32 +56,39 @@ export default function PortfolioPage() {
       return;
     }
 
-    // Synchronize the holding set immediately while preserving the last known
-    // quote. A partial/failed refresh must never turn a missing price into zero.
     setEnriched((previous) => holdings.map((holding) => {
       const prior = previous.find((item) => item.id === holding.id);
-      return prior ? { ...holding, currentPrice: prior.currentPrice, change: prior.change, changePct: prior.changePct } : withoutQuote(holding);
+      return prior
+        ? {
+            ...holding,
+            currentPrice: prior.currentPrice,
+            change: prior.change,
+            changePct: prior.changePct,
+          }
+        : withoutQuote(holding);
     }));
 
     setLoading(true);
     try {
-      const symbols = [...new Set(holdings.map((h) => h.symbol))];
+      const symbols = [...new Set(holdings.map((holding) => holding.symbol))];
       const res = await fetch(`/api/quotes?symbols=${symbols.join(",")}`);
       if (res.ok) {
         const json = await res.json() as { data?: Quote[] };
         const quoteMap = new Map<string, Quote>();
-        for (const q of json.data || []) {
-          quoteMap.set(q.symbol, q);
+        for (const quote of json.data || []) {
+          quoteMap.set(quote.symbol, quote);
         }
         setEnriched((previous) => holdings.map((holding) => {
-          const q = quoteMap.get(holding.symbol);
+          const quote = quoteMap.get(holding.symbol);
           const prior = previous.find((item) => item.id === holding.id);
-          const hasFreshPrice = q && Number.isFinite(q.price) && q.price > 0;
+          const freshPrice = quote && Number.isFinite(quote.price) && quote.price > 0
+            ? quote.price
+            : null;
           return {
             ...holding,
-            currentPrice: hasFreshPrice ? q.price : prior?.currentPrice ?? null,
-            change: q?.change ?? prior?.change ?? 0,
-            changePct: q?.changePct ?? prior?.changePct ?? 0,
+            currentPrice: freshPrice ?? prior?.currentPrice ?? null,
+            change: quote?.change ?? prior?.change ?? 0,
+            changePct: quote?.changePct ?? prior?.changePct ?? 0,
           };
         }));
       }
@@ -99,7 +106,12 @@ export default function PortfolioPage() {
   const rows = holdings.map((holding) => {
     const quote = enriched.find((item) => item.id === holding.id);
     return quote
-      ? { ...holding, currentPrice: quote.currentPrice, change: quote.change, changePct: quote.changePct }
+      ? {
+          ...holding,
+          currentPrice: quote.currentPrice,
+          change: quote.change,
+          changePct: quote.changePct,
+        }
       : withoutQuote(holding);
   });
   const totals = calculatePortfolioTotals(rows);
@@ -284,11 +296,15 @@ export default function PortfolioPage() {
             </TableHeader>
             <TableBody>
               {rows.map((holding) => {
-                const hasPrice = holding.currentPrice !== null && holding.currentPrice > 0;
-                const marketValue = hasPrice ? holding.shares * holding.currentPrice : null;
+                const currentPrice = holding.currentPrice !== null && holding.currentPrice > 0
+                  ? holding.currentPrice
+                  : null;
+                const marketValue = currentPrice === null ? null : holding.shares * currentPrice;
                 const costBasis = holding.shares * holding.avgCost;
                 const profitLoss = marketValue === null ? null : marketValue - costBasis;
-                const profitLossPct = profitLoss !== null && costBasis > 0 ? (profitLoss / costBasis) * 100 : null;
+                const profitLossPct = profitLoss !== null && costBasis > 0
+                  ? (profitLoss / costBasis) * 100
+                  : null;
 
                 return (
                   <TableRow key={holding.id} className="hover:bg-muted/50">
@@ -300,7 +316,7 @@ export default function PortfolioPage() {
                     <TableCell className="text-right font-mono tabular-nums">{holding.shares}</TableCell>
                     <TableCell className="text-right font-mono tabular-nums">{formatPrice(holding.avgCost)}</TableCell>
                     <TableCell className="text-right font-mono tabular-nums">
-                      {hasPrice ? formatPrice(holding.currentPrice) : "—"}
+                      {currentPrice !== null ? formatPrice(currentPrice) : "—"}
                     </TableCell>
                     <TableCell className="text-right font-mono tabular-nums">
                       {marketValue !== null ? formatPrice(marketValue) : "—"}
