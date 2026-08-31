@@ -1,30 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { US_MARKET } from "@/lib/constants";
-
-type MarketStatus = "open" | "closed" | "pre-market" | "after-hours";
-
-function getMarketStatus(): MarketStatus {
-  const now = new Date();
-  const et = new Date(
-    now.toLocaleString("en-US", { timeZone: US_MARKET.timezone }),
-  );
-  const day = et.getDay();
-  const h = et.getHours();
-  const m = et.getMinutes();
-  const mins = h * 60 + m;
-  const openMins = US_MARKET.openHour * 60 + US_MARKET.openMinute; // 570
-  const closeMins = US_MARKET.closeHour * 60 + US_MARKET.closeMinute; // 960
-
-  // Weekend
-  if (day === 0 || day === 6) return "closed";
-
-  if (mins >= openMins && mins < closeMins) return "open";
-  if (mins >= 400 && mins < openMins) return "pre-market"; // 4:00 AM – 9:30 AM
-  if (mins >= closeMins && mins < 1200) return "after-hours"; // 4:00 PM – 8:00 PM
-  return "closed";
-}
+import { getUsMarketStatus, type MarketStatus } from "@/lib/market-calendar";
 
 const STATUS_CONFIG: Record<MarketStatus, { label: string; color: string }> = {
   open: { label: "Market Open", color: "bg-green-500" },
@@ -34,10 +11,10 @@ const STATUS_CONFIG: Record<MarketStatus, { label: string; color: string }> = {
 };
 
 export function MarketStatusIndicator() {
-  const [status, setStatus] = useState<MarketStatus>(() => getMarketStatus());
+  const [status, setStatus] = useState<MarketStatus>(() => getUsMarketStatus());
 
   useEffect(() => {
-    const id = setInterval(() => setStatus(getMarketStatus()), 60_000);
+    const id = setInterval(() => setStatus(getUsMarketStatus()), 60_000);
     return () => clearInterval(id);
   }, []);
 
