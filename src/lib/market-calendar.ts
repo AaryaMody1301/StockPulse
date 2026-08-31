@@ -183,6 +183,25 @@ export function nearestUsMarketTradingDate(
   return null;
 }
 
+export function latestCompletedUsMarketSessionDate(now = new Date()): string | null {
+  const et = easternParts(now);
+  const today = isoDate(et.year, et.month, et.day);
+  const currentMinutes = et.hour * 60 + et.minute;
+
+  if (isUsMarketTradingDate(today)) {
+    const holidays = holidaysForYear(et.year);
+    const earlyCloses = earlyClosesForYear(et.year, holidays);
+    const closeMinutes = earlyCloses.has(today)
+      ? 13 * 60
+      : US_MARKET.closeHour * 60 + US_MARKET.closeMinute;
+    if (currentMinutes >= closeMinutes) return today;
+  }
+
+  const previousCalendarDate = new Date(Date.UTC(et.year, et.month - 1, et.day));
+  previousCalendarDate.setUTCDate(previousCalendarDate.getUTCDate() - 1);
+  return nearestUsMarketTradingDate(previousCalendarDate.toISOString().slice(0, 10), -1);
+}
+
 export function getUsMarketStatus(now = new Date()): MarketStatus {
   const et = easternParts(now);
   const date = isoDate(et.year, et.month, et.day);
