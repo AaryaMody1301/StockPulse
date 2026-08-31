@@ -5,6 +5,26 @@ import type { MarketDataProvider, Quote, SymbolSearchResult, CompanyProfileData,
 
 export type { Quote, SymbolSearchResult, CompanyProfileData, DailyBarData, MarketNewsItem } from "./types";
 
+export function normalizeSearchResults(results: SymbolSearchResult[]): SymbolSearchResult[] {
+  const normalized: SymbolSearchResult[] = [];
+  const seen = new Set<string>();
+
+  for (const result of results) {
+    let symbol: string;
+    try {
+      symbol = normalizeStockSymbol(result.symbol);
+    } catch {
+      continue;
+    }
+    if (seen.has(symbol)) continue;
+    seen.add(symbol);
+    normalized.push({ ...result, symbol });
+    if (normalized.length >= 10) break;
+  }
+
+  return normalized;
+}
+
 /**
  * Unified market data service with automatic fallback.
  * Primary: Finnhub | Backup: Twelve Data
@@ -42,7 +62,8 @@ class MarketDataService {
   async searchSymbol(query: string): Promise<SymbolSearchResult[]> {
     const q = query.trim().slice(0, 50);
     if (!q) return [];
-    return this.withFallback((p) => p.searchSymbol(q));
+    const results = await this.withFallback((p) => p.searchSymbol(q));
+    return normalizeSearchResults(results);
   }
 
   async getCompanyProfile(symbol: string): Promise<CompanyProfileData> {
