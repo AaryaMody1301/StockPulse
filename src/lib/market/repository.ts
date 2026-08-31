@@ -1,4 +1,8 @@
 import { db } from "@/lib/db";
+import {
+  DEFAULT_DAILY_START_TOLERANCE_DAYS,
+  hasDailyCoverage,
+} from "@/lib/market/coverage";
 import { marketData } from "@/lib/providers";
 import type { CompanyProfileData, DailyBarData, Quote } from "@/lib/providers/types";
 import { normalizeStockSymbol, normalizeStockSymbols } from "@/lib/symbols";
@@ -6,7 +10,7 @@ import { normalizeStockSymbol, normalizeStockSymbols } from "@/lib/symbols";
 export const MARKET_FRESHNESS = {
   quoteMs: 45_000,
   profileMs: 7 * 24 * 60 * 60 * 1000,
-  dailyCoverageToleranceDays: 7,
+  dailyStartToleranceDays: DEFAULT_DAILY_START_TOLERANCE_DAYS,
 } as const;
 
 function databaseConfigured(): boolean {
@@ -24,26 +28,6 @@ export function isStoredQuoteFresh(
 ): boolean {
   const age = nowMs - timestamp.getTime();
   return age >= 0 && age <= maxAgeMs;
-}
-
-export function hasDailyCoverage(
-  dates: string[],
-  from: string,
-  to: string,
-  toleranceDays = MARKET_FRESHNESS.dailyCoverageToleranceDays,
-): boolean {
-  if (dates.length === 0) return false;
-  const sorted = [...dates].sort();
-  const dayMs = 24 * 60 * 60 * 1000;
-  const toleranceMs = toleranceDays * dayMs;
-  const first = toDateOnly(sorted[0]).getTime();
-  const last = toDateOnly(sorted[sorted.length - 1]).getTime();
-  const fromMs = toDateOnly(from).getTime();
-  const requestedToMs = toDateOnly(to).getTime();
-  const today = new Date();
-  const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
-  const effectiveToMs = Math.min(requestedToMs, todayUtc);
-  return first <= fromMs + toleranceMs && last >= effectiveToMs - toleranceMs;
 }
 
 function snapshotToQuote(row: {

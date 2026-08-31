@@ -61,6 +61,13 @@ function isoDate(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+function parseIsoDate(value: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10) === value ? parsed : null;
+}
+
 function nthWeekday(year: number, monthIndex: number, weekday: number, occurrence: number): Date {
   const first = new Date(Date.UTC(year, monthIndex, 1));
   const offset = (weekday - first.getUTCDay() + 7) % 7;
@@ -136,15 +143,72 @@ function fallbackEarlyCloses(year: number, holidays: ReadonlySet<string>): Set<s
     .filter((date) => !holidays.has(date)));
 }
 
+function holidaysForYear(year: number): ReadonlySet<string> {
+  return PUBLISHED_HOLIDAYS[year] ?? fallbackHolidays(year);
+}
+
+function earlyClosesForYear(year: number, holidays: ReadonlySet<string>): ReadonlySet<string> {
+  return PUBLISHED_EARLY_CLOSES[year] ?? fallbackEarlyCloses(year, holidays);
+}
+
+export function isUsMarketTradingDate(value: string): boolean {
+  const date = parseIsoDate(value);
+  if (!date) return false;
+  const weekday = date.getUTCDay();
+  if (weekday === 0 || weekday === 6) return false;
+
+  const year = date.getUTCFullYear();
+  if (holidaysForYear(year).has(value)) return false;
+
+  // A Saturday New Year's Day can be observed on Dec. 31 of the prior year
+  // under the fallback rules, so also check holidays calculated for next year.
+  return !holidaysForYear(year + 1).has(value);
+}
+
+export function nearestUsMarketTradingDate(
+  value: string,
+  direction: -1 | 1,
+  maxCalendarDays = 14,
+): string | null {
+  const start = parseIsoDate(value);
+  if (!start || maxCalendarDays < 0) return null;
+
+  for (let offset = 0; offset <= maxCalendarDays; offset += 1) {
+    const candidate = new Date(start.getTime());
+    candidate.setUTCDate(candidate.getUTCDate() + offset * direction);
+    const candidateValue = candidate.toISOString().slice(0, 10);
+    if (isUsMarketTradingDate(candidateValue)) return candidateValue;
+  }
+
+  return null;
+}
+
+export function latestCompletedUsMarketSessionDate(now = new Date()): string | null {
+  const et = easternParts(now);
+  const today = isoDate(et.year, et.month, et.day);
+  const currentMinutes = et.hour * 60 + et.minute;
+
+  if (isUsMarketTradingDate(today)) {
+    const holidays = holidaysForYear(et.year);
+    const earlyCloses = earlyClosesForYear(et.year, holidays);
+    const closeMinutes = earlyCloses.has(today)
+      ? 13 * 60
+      : US_MARKET.closeHour * 60 + US_MARKET.closeMinute;
+    if (currentMinutes >= closeMinutes) return today;
+  }
+
+  const previousCalendarDate = new Date(Date.UTC(et.year, et.month - 1, et.day));
+  previousCalendarDate.setUTCDate(previousCalendarDate.getUTCDate() - 1);
+  return nearestUsMarketTradingDate(previousCalendarDate.toISOString().slice(0, 10), -1);
+}
+
 export function getUsMarketStatus(now = new Date()): MarketStatus {
   const et = easternParts(now);
   const date = isoDate(et.year, et.month, et.day);
-  if (et.weekday === 0 || et.weekday === 6) return "closed";
+  if (!isUsMarketTradingDate(date)) return "closed";
 
-  const holidays = PUBLISHED_HOLIDAYS[et.year] ?? fallbackHolidays(et.year);
-  if (holidays.has(date)) return "closed";
-
-  const earlyCloses = PUBLISHED_EARLY_CLOSES[et.year] ?? fallbackEarlyCloses(et.year, holidays);
+  const holidays = holidaysForYear(et.year);
+  const earlyCloses = earlyClosesForYear(et.year, holidays);
 
   const mins = et.hour * 60 + et.minute;
   const openMins = US_MARKET.openHour * 60 + US_MARKET.openMinute;

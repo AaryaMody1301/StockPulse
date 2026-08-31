@@ -13,14 +13,15 @@ StockPulse is a research tool, not a BUY/HOLD/SELL engine and not personalized i
 - Curated market dashboard with provider fallback and a canonical database-first read layer.
 - Stock detail pages with price history, company information, news, and stored SEC evidence.
 - SEC ticker-to-CIK resolution, filing ingestion, normalized XBRL metrics, bounded retries, and continuation-history support.
-- Deterministic period-over-period change detection with accession/concept provenance.
-- Browser-local watchlists and portfolios with validated legacy-data migration.
+- Deterministic period-over-period change detection with accession/concept provenance and reporting-period compatibility checks.
+- Browser-local watchlists and portfolios with validated legacy-data migration and safe partial-quote behavior.
 - Browser-local thesis workspace with assumptions, risks, catalysts, invalidation criteria, revision restore, and evidence relationships.
 - Stable evidence-review checkpoints and “new since last review” research state.
 - Watchlist-level research digest for companies with saved theses.
 - Versioned grounding packets that label source facts separately from deterministic calculations.
-- Optional server-configured AI analysis and “challenge my thesis” workflows. Every returned claim must cite a known grounding evidence ID and pass runtime validation before display.
+- Optional server-configured AI analysis and “challenge my thesis” workflows. Returned summaries and claims must cite known grounding evidence IDs and pass runtime validation before display.
 - GitHub Actions verification with PostgreSQL migration deployment, TypeScript, ESLint, unit/integration tests, and a production Next.js build.
+- Separate liveness (`/api/health`) and dependency/configuration readiness (`/api/ready`) probes.
 
 ## Stack
 
@@ -135,11 +136,11 @@ AI is an optional layer over deterministic evidence; it is not required for core
 
 The server builds a bounded `stockpulse-grounding` packet containing stored SEC filings, normalized facts, and deterministic changes. A model response must match the strict `stockpulse-grounded-analysis` contract:
 
+- summaries and claims cite evidence IDs present in the packet;
 - claims are labeled `Fact`, `Derived`, or `Inference`;
-- every claim cites one or more evidence IDs present in the packet;
 - invented evidence IDs are rejected;
 - unexpected output fields are rejected;
-- recommendation language such as BUY/HOLD/SELL or price targets is rejected;
+- recommendation/positioning language such as BUY/HOLD/SELL, allocation instructions, or price targets is rejected;
 - provider/model failures leave deterministic evidence usable.
 
 “Challenge my thesis” sends the current thesis only after an explicit user action; normal browser-local research is not silently uploaded to an AI endpoint.
@@ -169,7 +170,9 @@ npm run build
 
 `npm run check` runs application TypeScript checking, worker/CLI TypeScript checking, ESLint, and tests.
 
-CI additionally starts PostgreSQL, applies all checked-in migrations with `prisma migrate deploy`, verifies an idempotent SEC database write, and then runs the production build.
+CI additionally starts PostgreSQL, applies all checked-in migrations with `prisma migrate deploy`, verifies an idempotent SEC database write, runs the production-only high-severity dependency audit, and then runs the production build.
+
+Historical daily-cache completeness is evaluated against completed U.S. market sessions rather than a fixed calendar-day tolerance, so weekends, exchange holidays, normal closes, and published early closes do not silently mask stale history.
 
 ## Main routes
 
@@ -182,7 +185,8 @@ CI additionally starts PostgreSQL, applies all checked-in migrations with `prism
 - `/portfolio` — browser-local holdings and P&L
 - `/compare` — canonical daily-history comparison
 - `/news` — provider-backed market/company news
-- `/api/health` — basic application health route
+- `/api/health` — liveness probe; confirms the web process can respond
+- `/api/ready` — readiness probe; checks PostgreSQL reachability and market-provider configuration while reporting optional SEC/AI/app-URL configuration without exposing secrets
 
 ## Deployment
 
@@ -200,9 +204,11 @@ Before production deployment:
 2. run `npm ci`;
 3. run `npx prisma migrate deploy`;
 4. run `npm run check` and `npm run build`;
-5. verify `/api/health` and credentialed market-provider routes;
-6. perform an identified live SEC ingestion with the real `SEC_USER_AGENT`;
-7. verify actual data-provider display/redistribution rights for the plan and markets in use.
+5. verify `/api/health` returns 200 and `/api/ready` returns 200 in the deployed environment;
+6. smoke-test credentialed market-provider routes;
+7. perform an identified live SEC ingestion with the real `SEC_USER_AGENT`;
+8. verify actual data-provider display/redistribution rights and required attribution for the plan and markets in use;
+9. verify TLS, reverse-proxy headers, process supervision/restart behavior, and database backup/restore.
 
 Operational constraints and security notes are in [`docs/OPERATIONS.md`](docs/OPERATIONS.md). The implementation history and product principles remain in [`docs/UPGRADE_PLAN.md`](docs/UPGRADE_PLAN.md).
 
@@ -215,6 +221,16 @@ Operational constraints and security notes are in [`docs/OPERATIONS.md`](docs/OP
 - No browser storage contains provider API credentials.
 - StockPulse does not issue automatic investment recommendations or price targets.
 
+## Contributing and security
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the required local/CI checks and evidence-integrity conventions. Security reports should follow [`SECURITY.md`](SECURITY.md); never post real API keys, database URLs, private thesis exports, or exploit details in a public issue.
+
 ## Known operator responsibilities
 
-The repository can test schemas, migrations, provider parsers, deterministic calculations, and builds without production credentials. It cannot prove your private provider subscription entitlements, production PostgreSQL networking, reverse-proxy configuration, or real credentialed provider/SEC behavior. Run those deployment smoke checks in the target environment before public release.
+The repository can test schemas, migrations, provider parsers, deterministic calculations, dependency gates, readiness logic, and production builds without production credentials. It cannot prove private provider subscription entitlements, production PostgreSQL networking/backups, reverse-proxy/TLS configuration, or real credentialed provider/SEC behavior. Run those deployment smoke checks in the target environment before public release.
+
+Provider licensing is an operational release gate, not something source code can grant. Public display/redistribution must comply with the market-data plan, exchange requirements, and any required attribution.
+
+## License status
+
+No open-source license has been selected for this repository. Until the owner adds a `LICENSE` file, reuse is governed by the default copyright rules that apply to an unlicensed repository. A license should be chosen deliberately based on the owner’s intended reuse and distribution terms rather than inferred by application code.
