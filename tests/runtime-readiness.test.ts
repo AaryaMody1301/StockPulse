@@ -34,7 +34,7 @@ test("SEC placeholder identity is not treated as deployment-ready", () => {
 
   assert.equal(
     getRuntimeConfigurationStatus({
-      SEC_USER_AGENT: "StockPulse Research ops@company.example",
+      SEC_USER_AGENT: "StockPulse Research ops@company.com",
     }).secIngestionConfigured,
     true,
   );
