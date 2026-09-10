@@ -55,7 +55,7 @@
     "prisma": "7.10.0",
     "shadcn": "4.0.2",
     "tailwindcss": "^4",
-    "typescript": "^7.0.2"
+    "typescript": "6.0.3"
   },
   "overrides": {
     "deepmerge-ts": "8.0.2"
