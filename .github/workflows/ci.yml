@@ -45,6 +45,16 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Generate upgraded lockfile
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Upload generated lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: stockpulse-generated-lockfile
+          path: package-lock.json
+          retention-days: 1
+
       - name: Install dependencies
         run: npm ci
 
