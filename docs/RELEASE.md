@@ -51,6 +51,16 @@ The browser tool is intentionally not part of the application dependency graph. 
 
 A tag must not publish a release if any source gate fails.
 
+Run the production audit through `npm run audit:production` so npm supplies its CLI path. The shared CI/release check invokes that JavaScript CLI through Node on Windows and Linux, allows at most two minutes, and rejects failed or incomplete audit reports. High/critical advisories are ignored only when every affected lockfile entry is marked `dev` or `devOptional`.
+
+Normal CI also runs every Monday at 06:00 UTC and can be started manually, so dependency advisories discovered after the last code change are checked again.
+
+## Selecting the release-candidate commit
+
+After merging the release PR, refresh `main` from GitHub and confirm that normal CI passed on its exact current commit, including the database, production smoke, and browser reviewer gates. Tag that verified commit explicitly; do not reuse a SHA or test count from an earlier release checklist.
+
+[Release issue #16](https://github.com/AaryaMody1301/StockPulse/issues/16) refers to the older `86476bc21d1856f1c08fabf562344a10818fce74` commit. Those commit-specific instructions are superseded by the freshly verified merged `main` commit and its current CI results. Before creating an RC, check whether the example tag already exists and select the next unused `v<version>-rc.N` tag. The tag workflow must then pass again on that exact commit before publishing the prerelease and SBOM.
+
 ## Release-candidate environment gate
 
 Before promoting an RC to the stable tag, validate the exact RC commit in a staging or production-like environment.
@@ -120,7 +130,7 @@ Recommended sequence:
 
 1. merge the release PR to `main`;
 2. confirm normal `main` CI, including production smoke and browser reviewer acceptance, is green;
-3. tag `v0.1.0-rc.1` on that reviewed `main` commit;
+3. tag the next unused `v0.1.0-rc.N` on that exact reviewed and verified `main` commit;
 4. let `.github/workflows/release.yml` publish the prerelease and SBOM;
 5. execute the live-environment gate against the RC;
 6. fix release-only defects through normal PRs and issue another RC if necessary;

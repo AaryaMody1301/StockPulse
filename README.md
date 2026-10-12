@@ -37,7 +37,7 @@ StockPulse is a research tool, not a BUY/HOLD/SELL engine and not personalized i
 
 ## Requirements
 
-- Node.js 20.19+; Node 22 is used in CI
+- Node.js 22 or newer; Node 22 is used in CI
 - npm
 - PostgreSQL
 - **Demo mode:** no market-data key, SEC identity, or AI key required
