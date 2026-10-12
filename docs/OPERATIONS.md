@@ -6,7 +6,7 @@ This document records production assumptions, security boundaries, and checks th
 
 The checked-in configuration assumes:
 
-- Node.js 20.19+; CI uses Node 22;
+- Node.js 22 or newer; CI uses Node 22;
 - one Next.js Node process behind a trusted reverse proxy;
 - one quote-polling worker;
 - PostgreSQL for persisted market/SEC evidence;

@@ -6,7 +6,7 @@ StockPulse has two reviewer paths. The recommended path is **credential-free dem
 
 Requirements:
 
-- Node.js 20.19+
+- Node.js 22 or newer
 - PostgreSQL
 - no Finnhub key
 - no Twelve Data key
